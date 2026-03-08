@@ -3,7 +3,7 @@ llm:
 
   gemini:
     api_key: ${GEMINI_API_KEY}
-    model: gemini-2.5-pro-latest
+    model: gemini-2.5-pro
 
   openrouter:
     base_url: https://openrouter.ai/api/v1
@@ -14,7 +14,7 @@ llm:
 
   ollama:
     base_url: http://localhost:11434
-    model: gemma3:27b
+    model: ministral-3:14b
 
   max_tokens: 8192
   temperature: 0.2
@@ -50,8 +50,6 @@ manim:
   timeout_seconds: 300
 
 composition:
-  sync_strategy: time_stretch   # time_stretch | audio_led
-  time_stretch_threshold: 0.15
   output_crf: 18
   output_preset: slow
 

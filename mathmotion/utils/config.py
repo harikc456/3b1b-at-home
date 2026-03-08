@@ -10,7 +10,7 @@ from pydantic import BaseModel
 
 from .errors import ConfigError
 
-load_dotenv()
+load_dotenv(override=True)
 
 
 class GeminiConfig(BaseModel):
@@ -69,8 +69,6 @@ class ManimConfig(BaseModel):
 
 
 class CompositionConfig(BaseModel):
-    sync_strategy: str = "time_stretch"
-    time_stretch_threshold: float = 0.15
     output_crf: int = 18
     output_preset: str = "slow"
 
