@@ -8,7 +8,7 @@ llm:
   openrouter:
     base_url: https://openrouter.ai/api/v1
     api_key: ${OPENROUTER_API_KEY}
-    model: google/gemini-2.5-pro
+    model: qwen/qwen3-next-80b-a3b-instruct:free
     site_url: https://mathmotion.local
     site_name: MathMotion
 
