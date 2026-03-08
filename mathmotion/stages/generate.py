@@ -62,7 +62,6 @@ def run(
     config,
     provider: LLMProvider,
     level: str = "undergraduate",
-    duration: int = 120,
 ) -> GeneratedScript:
     domains = _detect_domains(topic)
     domain_hints = ""
@@ -77,7 +76,6 @@ def run(
     system_prompt = Path("prompts/system_prompt.txt").read_text().format(
         topic=topic,
         level=level,
-        duration_target=duration,
         domain_hints=domain_hints,
         schema_json=schema_json,
     )
