@@ -3,7 +3,10 @@ animation script and narration for the following topic.
 
 TOPIC: {topic}
 LEVEL: {level}
-TARGET DURATION: {duration_target} seconds
+DURATION POLICY: Do NOT target a fixed duration. Determine the appropriate length
+based on the topic's complexity and the student's LEVEL. High school explanations
+need more scaffolding and analogies; graduate content can be denser and faster.
+Teach the concept completely — no artificial padding or premature truncation.
 
 DOMAIN HINTS:
 {domain_hints}
