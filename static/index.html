@@ -1,0 +1,390 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>MathMotion</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background: #0f0f1a;
+      color: #e0e0f0;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 2.5rem 1rem 4rem;
+    }
+
+    h1 {
+      font-size: 2.2rem;
+      font-weight: 700;
+      background: linear-gradient(135deg, #a78bfa, #60a5fa);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      margin-bottom: 0.3rem;
+    }
+
+    .subtitle {
+      color: #6b7280;
+      margin-bottom: 2.5rem;
+      font-size: 0.95rem;
+    }
+
+    .card {
+      background: #1a1a2e;
+      border: 1px solid #2d2d4e;
+      border-radius: 14px;
+      padding: 2rem;
+      width: 100%;
+      max-width: 700px;
+      box-shadow: 0 4px 32px rgba(0,0,0,0.4);
+    }
+
+    label {
+      display: block;
+      font-size: 0.82rem;
+      font-weight: 600;
+      color: #8b8bb0;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      margin-bottom: 0.4rem;
+      margin-top: 1.3rem;
+    }
+
+    label:first-of-type { margin-top: 0; }
+
+    textarea, select {
+      width: 100%;
+      background: #0f0f1a;
+      border: 1px solid #2d2d4e;
+      border-radius: 8px;
+      color: #e0e0f0;
+      font-size: 0.95rem;
+      padding: 0.7rem 0.9rem;
+      outline: none;
+      transition: border-color 0.15s;
+      appearance: none;
+    }
+
+    textarea { resize: vertical; min-height: 90px; font-family: inherit; line-height: 1.5; }
+    textarea:focus, select:focus { border-color: #7c3aed; }
+
+    select {
+      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath fill='%236b7280' d='M1 1l5 5 5-5'/%3E%3C/svg%3E");
+      background-repeat: no-repeat;
+      background-position: right 0.8rem center;
+      padding-right: 2.2rem;
+    }
+
+    .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
+    .grid-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 1rem; }
+
+    #voice-group { display: none; }
+
+    button#submit {
+      margin-top: 1.8rem;
+      width: 100%;
+      padding: 0.9rem;
+      background: linear-gradient(135deg, #7c3aed, #6d28d9);
+      color: #fff;
+      border: none;
+      border-radius: 8px;
+      font-size: 1rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: opacity 0.15s, transform 0.1s;
+      letter-spacing: 0.02em;
+    }
+
+    button#submit:hover:not(:disabled) { opacity: 0.9; transform: translateY(-1px); }
+    button#submit:active:not(:disabled) { transform: translateY(0); }
+    button#submit:disabled { background: #374151; cursor: not-allowed; }
+
+    /* Status card */
+    #status-card {
+      display: none;
+      margin-top: 1.5rem;
+      background: #1a1a2e;
+      border: 1px solid #2d2d4e;
+      border-radius: 14px;
+      padding: 1.75rem;
+      width: 100%;
+      max-width: 700px;
+    }
+
+    .progress-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 0.6rem;
+    }
+
+    #step-text { font-size: 0.9rem; color: #c4b5fd; }
+    #pct-text  { font-size: 0.85rem; color: #6b7280; }
+
+    .progress-track {
+      background: #0f0f1a;
+      border-radius: 99px;
+      height: 8px;
+      overflow: hidden;
+    }
+
+    .progress-fill {
+      height: 100%;
+      background: linear-gradient(90deg, #7c3aed, #60a5fa);
+      border-radius: 99px;
+      width: 0%;
+      transition: width 0.5s ease;
+    }
+
+    #error-msg {
+      margin-top: 0.8rem;
+      color: #f87171;
+      font-size: 0.88rem;
+      display: none;
+    }
+
+    #video-section {
+      display: none;
+      margin-top: 1.25rem;
+    }
+
+    video {
+      width: 100%;
+      border-radius: 8px;
+      background: #000;
+      max-height: 400px;
+    }
+
+    .video-actions {
+      display: flex;
+      gap: 0.75rem;
+      margin-top: 0.9rem;
+    }
+
+    .btn-secondary {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.4rem;
+      padding: 0.55rem 1.1rem;
+      border-radius: 7px;
+      font-size: 0.88rem;
+      font-weight: 600;
+      text-decoration: none;
+      cursor: pointer;
+      border: none;
+    }
+
+    .btn-download { background: #059669; color: #fff; }
+    .btn-download:hover { background: #047857; }
+    .btn-new { background: #1e293b; color: #94a3b8; border: 1px solid #334155; }
+    .btn-new:hover { background: #334155; }
+  </style>
+</head>
+<body>
+  <h1>MathMotion</h1>
+  <p class="subtitle">Type a math topic — get an animated video explanation</p>
+
+  <div class="card">
+    <label for="topic">Topic</label>
+    <textarea id="topic" placeholder="e.g. Explain what a derivative is and why it matters geometrically"></textarea>
+
+    <div class="grid-2">
+      <div>
+        <label for="level">Level</label>
+        <select id="level">
+          <option value="high_school">High School</option>
+          <option value="undergraduate" selected>Undergraduate</option>
+          <option value="graduate">Graduate</option>
+        </select>
+      </div>
+      <div>
+        <label for="duration">Duration</label>
+        <select id="duration">
+          <option value="60">1 minute</option>
+          <option value="120" selected>2 minutes</option>
+          <option value="180">3 minutes</option>
+          <option value="300">5 minutes</option>
+        </select>
+      </div>
+    </div>
+
+    <div class="grid-3">
+      <div>
+        <label for="quality">Quality</label>
+        <select id="quality">
+          <option value="draft">Draft (fast)</option>
+          <option value="standard" selected>Standard</option>
+          <option value="high">High (slow)</option>
+        </select>
+      </div>
+      <div>
+        <label for="llm_provider">AI Model</label>
+        <select id="llm_provider"></select>
+      </div>
+      <div>
+        <label for="tts_engine">Voice Engine</label>
+        <select id="tts_engine"></select>
+      </div>
+    </div>
+
+    <div id="voice-group">
+      <label for="voice">Voice</label>
+      <select id="voice"></select>
+    </div>
+
+    <button id="submit">Generate Video</button>
+  </div>
+
+  <div id="status-card">
+    <div class="progress-header">
+      <span id="step-text">Starting…</span>
+      <span id="pct-text">0%</span>
+    </div>
+    <div class="progress-track">
+      <div class="progress-fill" id="progress-fill"></div>
+    </div>
+    <div id="error-msg"></div>
+
+    <div id="video-section">
+      <video id="player" controls></video>
+      <div class="video-actions">
+        <a id="download-btn" class="btn-secondary btn-download" download>⬇ Download MP4</a>
+        <button class="btn-secondary btn-new" onclick="resetUI()">+ New Video</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    let options = {};
+    let pollTimer = null;
+
+    async function init() {
+      try {
+        const res = await fetch("/api/config/options");
+        options = await res.json();
+      } catch {
+        options = {
+          llm_providers: ["gemini", "openrouter", "ollama"],
+          tts_engines: ["kokoro", "vibevoice"],
+          kokoro_voices: ["af_heart", "af_sky", "af_bella", "bm_lewis", "bm_george"],
+          vibevoice_voices: ["neutral_female", "neutral_male", "expressive_female"],
+          qualities: ["draft", "standard", "high"],
+          defaults: { llm_provider: "gemini", tts_engine: "kokoro", quality: "standard" },
+        };
+      }
+
+      populate("llm_provider", options.llm_providers, options.defaults.llm_provider, label => {
+        const map = { gemini: "Gemini", openrouter: "OpenRouter", ollama: "Ollama (local)" };
+        return map[label] || label;
+      });
+
+      populate("tts_engine", options.tts_engines, options.defaults.tts_engine, label => {
+        return label.charAt(0).toUpperCase() + label.slice(1);
+      });
+
+      document.getElementById("tts_engine").addEventListener("change", updateVoices);
+      updateVoices();
+    }
+
+    function populate(id, values, defaultVal, labelFn = x => x) {
+      const sel = document.getElementById(id);
+      sel.innerHTML = "";
+      values.forEach(v => {
+        const o = document.createElement("option");
+        o.value = v;
+        o.textContent = labelFn(v);
+        if (v === defaultVal) o.selected = true;
+        sel.appendChild(o);
+      });
+    }
+
+    function updateVoices() {
+      const engine = document.getElementById("tts_engine").value;
+      const voices = engine === "kokoro" ? options.kokoro_voices : options.vibevoice_voices;
+      const group = document.getElementById("voice-group");
+      if (!voices || voices.length <= 1) {
+        group.style.display = "none";
+        return;
+      }
+      group.style.display = "block";
+      populate("voice", voices, voices[0]);
+    }
+
+    document.getElementById("submit").addEventListener("click", async () => {
+      const topic = document.getElementById("topic").value.trim();
+      if (!topic) { alert("Please enter a topic."); return; }
+
+      document.getElementById("submit").disabled = true;
+      document.getElementById("status-card").style.display = "block";
+      document.getElementById("video-section").style.display = "none";
+      document.getElementById("error-msg").style.display = "none";
+      setProgress("Starting…", 0);
+
+      const voiceEl = document.getElementById("voice");
+      const body = {
+        topic,
+        quality:      document.getElementById("quality").value,
+        level:        document.getElementById("level").value,
+        duration:     parseInt(document.getElementById("duration").value),
+        tts_engine:   document.getElementById("tts_engine").value,
+        llm_provider: document.getElementById("llm_provider").value,
+        voice:        voiceEl && voiceEl.offsetParent ? voiceEl.value : null,
+      };
+
+      const res = await fetch("/api/generate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+      const { job_id } = await res.json();
+      pollTimer = setInterval(() => poll(job_id), 2000);
+    });
+
+    async function poll(job_id) {
+      let job;
+      try {
+        const res = await fetch(`/api/status/${job_id}`);
+        job = await res.json();
+      } catch { return; }
+
+      setProgress(job.step || "Working…", job.pct || 0);
+
+      if (job.status === "complete") {
+        clearInterval(pollTimer);
+        const url = `/api/download/${job_id}`;
+        document.getElementById("player").src = url;
+        document.getElementById("download-btn").href = url;
+        document.getElementById("download-btn").download = `mathmotion_${job_id}.mp4`;
+        document.getElementById("video-section").style.display = "block";
+        document.getElementById("submit").disabled = false;
+      } else if (job.status === "failed") {
+        clearInterval(pollTimer);
+        const errEl = document.getElementById("error-msg");
+        errEl.textContent = "Error: " + (job.error || "Unknown error");
+        errEl.style.display = "block";
+        setProgress("Failed", 0);
+        document.getElementById("submit").disabled = false;
+      }
+    }
+
+    function setProgress(step, pct) {
+      document.getElementById("step-text").textContent = step;
+      document.getElementById("pct-text").textContent = pct + "%";
+      document.getElementById("progress-fill").style.width = pct + "%";
+    }
+
+    function resetUI() {
+      clearInterval(pollTimer);
+      document.getElementById("status-card").style.display = "none";
+      document.getElementById("submit").disabled = false;
+      document.getElementById("topic").focus();
+    }
+
+    init();
+  </script>
+</body>
+</html>

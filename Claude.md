@@ -33,19 +33,23 @@ Full plan: [`docs/plans/2026-03-08-mathmotion-pipeline.md`](./docs/plans/2026-03
 Personal-use web app: FastAPI backend + single HTML page. No auth, no Docker, no job queue.
 LLM: Gemini (primary), OpenRouter, Ollama. TTS: Kokoro, Vibevoice.
 
-- [ ] Task 1: Project scaffold + dependencies
-- [ ] Task 2: Config system + errors (`mathmotion/utils/config.py`, `errors.py`)
-- [ ] Task 3: Pydantic schema (`mathmotion/schemas/script.py`)
-- [ ] Task 4: LLM providers — Gemini, OpenRouter, Ollama (`mathmotion/llm/`)
-- [ ] Task 5: TTS engines — Kokoro, Vibevoice (`mathmotion/tts/`)
-- [ ] Task 6: Validation + ffprobe utils (`mathmotion/utils/`)
-- [ ] Task 7: Stage 2 — LLM Script Generation (`mathmotion/stages/generate.py`)
-- [ ] Task 8: Stage 3 — Manim Render (`mathmotion/stages/render.py`)
-- [ ] Task 9: Stage 4 — TTS Synthesis (`mathmotion/stages/tts.py`)
-- [ ] Task 10: Stage 5 — A/V Composition (`mathmotion/stages/compose.py`)
-- [ ] Task 11: Pipeline orchestrator (`mathmotion/pipeline.py`)
-- [ ] Task 12: FastAPI backend (`app.py`, `api/routes.py`)
-- [ ] Task 13: Web UI (`static/index.html`)
-- [ ] Task 14: Smoke test (draft quality, end-to-end via browser)
+- [x] Task 1: Project scaffold + dependencies
+- [x] Task 2: Config system + errors (`mathmotion/utils/config.py`, `errors.py`)
+- [x] Task 3: Pydantic schema (`mathmotion/schemas/script.py`)
+- [x] Task 4: LLM providers — Gemini, OpenRouter, Ollama (`mathmotion/llm/`)
+- [x] Task 5: TTS engines — Kokoro, Vibevoice (`mathmotion/tts/`)
+- [x] Task 6: Validation + ffprobe utils (`mathmotion/utils/`)
+- [x] Task 7: Stage 2 — LLM Script Generation (`mathmotion/stages/generate.py`)
+- [x] Task 8: Stage 3 — Manim Render (`mathmotion/stages/render.py`)
+- [x] Task 9: Stage 4 — TTS Synthesis (`mathmotion/stages/tts.py`)
+- [x] Task 10: Stage 5 — A/V Composition (`mathmotion/stages/compose.py`)
+- [x] Task 11: Pipeline orchestrator (`mathmotion/pipeline.py`)
+- [x] Task 12: FastAPI backend (`app.py`, `api/routes.py`)
+- [x] Task 13: Web UI (`static/index.html`)
+- [ ] Task 14: Smoke test — pending system deps (libcairo2-dev, ffmpeg, texlive)
 
 ## Progress
+
+**2026-03-08** — All 13 implementation tasks complete. 12/12 unit tests passing.
+Pending: install system deps (libcairo2-dev, ffmpeg, texlive) then run smoke test.
+Start app with: `uv run python app.py`
