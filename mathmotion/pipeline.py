@@ -17,7 +17,6 @@ def run(
     config: Config,
     quality: Optional[str] = None,
     level: str = "undergraduate",
-    duration: int = 120,
     voice: Optional[str] = None,
     tts_engine: Optional[str] = None,
     llm_provider: Optional[str] = None,
@@ -50,7 +49,7 @@ def run(
 
     progress("Generating script", 10)
     provider = get_provider(config)
-    script = generate.run(topic, job_dir, config, provider, level=level, duration=duration)
+    script = generate.run(topic, job_dir, config, provider, level=level)
 
     progress("Rendering animation and synthesising audio", 30)
     engine = get_engine(config)
