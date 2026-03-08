@@ -1,12 +1,4 @@
-from mathmotion.stages.compose import compute_drift, inject_actual_durations
-
-
-def test_drift_calculation():
-    assert abs(compute_drift(3.5, 3.0) - 0.1667) < 0.001
-
-
-def test_drift_zero_estimated():
-    assert compute_drift(3.5, 0.0) == 0.0
+from mathmotion.stages.render import inject_actual_durations
 
 
 def test_inject_replaces_wait():
