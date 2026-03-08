@@ -192,24 +192,13 @@
     <label for="topic">Topic</label>
     <textarea id="topic" placeholder="e.g. Explain what a derivative is and why it matters geometrically"></textarea>
 
-    <div class="grid-2">
-      <div>
-        <label for="level">Level</label>
-        <select id="level">
-          <option value="high_school">High School</option>
-          <option value="undergraduate" selected>Undergraduate</option>
-          <option value="graduate">Graduate</option>
-        </select>
-      </div>
-      <div>
-        <label for="duration">Duration</label>
-        <select id="duration">
-          <option value="60">1 minute</option>
-          <option value="120" selected>2 minutes</option>
-          <option value="180">3 minutes</option>
-          <option value="300">5 minutes</option>
-        </select>
-      </div>
+    <div>
+      <label for="level">Level</label>
+      <select id="level">
+        <option value="high_school">High School</option>
+        <option value="undergraduate" selected>Undergraduate</option>
+        <option value="graduate">Graduate</option>
+      </select>
     </div>
 
     <div class="grid-3">
@@ -329,7 +318,6 @@
         topic,
         quality:      document.getElementById("quality").value,
         level:        document.getElementById("level").value,
-        duration:     parseInt(document.getElementById("duration").value),
         tts_engine:   document.getElementById("tts_engine").value,
         llm_provider: document.getElementById("llm_provider").value,
         voice:        voiceEl && voiceEl.offsetParent ? voiceEl.value : null,
