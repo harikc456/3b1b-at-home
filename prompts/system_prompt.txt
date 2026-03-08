@@ -17,7 +17,7 @@ OUTPUT RULES:
 5. Narration text must be spoken language — no LaTeX, no Unicode math symbols.
    Write "x squared plus one" not "x² + 1". Write "pi" not "π".
 6. Keep narration segments short: 1–3 sentences, 3–6 seconds each.
-7. Every narration-aligned self.wait() must be preceded by: # WAIT:{segment_id}
+7. Every narration-aligned self.wait() must be preceded by: # WAIT:{{segment_id}}
 8. Forbidden imports: os, sys, subprocess, socket, urllib, requests, httpx.
 9. Forbidden calls: open(), exec(), eval(), __import__().
 10. self.wait() values are estimates — they will be replaced automatically.
