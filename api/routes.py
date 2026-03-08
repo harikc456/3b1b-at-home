@@ -17,7 +17,6 @@ class GenerateRequest(BaseModel):
     topic: str
     quality: str = "standard"
     level: str = "undergraduate"
-    duration: int = 120
     voice: Optional[str] = None
     tts_engine: Optional[str] = None
     llm_provider: Optional[str] = None
@@ -55,7 +54,6 @@ def start_generate(req: GenerateRequest):
                 config=cfg,
                 quality=req.quality,
                 level=req.level,
-                duration=req.duration,
                 voice=req.voice,
                 tts_engine=req.tts_engine,
                 llm_provider=req.llm_provider,
