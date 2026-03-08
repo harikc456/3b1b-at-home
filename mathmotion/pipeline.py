@@ -1,11 +1,13 @@
+import json
 import logging
 import uuid
-from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from typing import Callable, Optional
 
 from mathmotion.llm.factory import get_provider
+from mathmotion.schemas.script import GeneratedScript
 from mathmotion.stages import generate, render, tts, compose
+from mathmotion.stages.render import inject_actual_durations
 from mathmotion.tts.factory import get_engine
 from mathmotion.utils.config import Config
 
@@ -27,7 +29,6 @@ def run(
         if progress_callback:
             progress_callback(step, pct)
 
-    # Apply overrides onto config (mutates in-place — fine for personal single-job use)
     if quality:
         config.manim.default_quality = quality
     if llm_provider:
@@ -51,17 +52,30 @@ def run(
     provider = get_provider(config)
     script = generate.run(topic, job_dir, config, provider, level=level)
 
-    progress("Rendering animation and synthesising audio", 30)
+    progress("Synthesising audio", 30)
     engine = get_engine(config)
+    tts.run(script, job_dir, config, engine)
 
-    # Stages 3 + 4 run in parallel
-    with ThreadPoolExecutor(max_workers=2) as pool:
-        render_future = pool.submit(render.run, script, job_dir, config)
-        tts_future = pool.submit(tts.run, script, job_dir, config, engine)
-        render_future.result()  # raises on error
-        tts_future.result()
+    progress("Injecting durations into scene code", 55)
+    script = GeneratedScript.model_validate(
+        json.loads((job_dir / "narration.json").read_text())
+    )
+    durations = {
+        seg.id: seg.actual_duration
+        for scene in script.scenes
+        for seg in scene.narration_segments
+        if seg.actual_duration is not None
+    }
+    scenes_dir = job_dir / "scenes"
+    for scene in script.scenes:
+        scene_file = scenes_dir / f"{scene.id}.py"
+        if scene_file.exists():
+            scene_file.write_text(inject_actual_durations(scene_file.read_text(), durations))
 
-    progress("Composing final video", 80)
+    progress("Rendering animation", 65)
+    render.run(script, job_dir, config)
+
+    progress("Composing final video", 85)
     final = compose.run(job_dir, config)
 
     progress("Done", 100)
