@@ -1,4 +1,4 @@
-def test_config_loads(monkeypatch):
+def test_config_loads():
     from mathmotion.utils.config import get_config
     get_config.cache_clear()
     cfg = get_config()
