@@ -31,8 +31,8 @@ def run(
 
     if quality:
         config.manim.default_quality = quality
-    if llm_provider:
-        config.llm.provider = llm_provider
+    # llm_provider is kept in the signature for backwards-compatibility but is
+    # intentionally ignored — the provider is inferred from config.llm.model.
     if tts_engine:
         config.tts.engine = tts_engine
     if voice:
@@ -45,7 +45,7 @@ def run(
     job_dir = Path(config.storage.jobs_dir) / job_id
     job_dir.mkdir(parents=True, exist_ok=True)
 
-    logger.info(f"Job {job_id} | topic={topic!r} | provider={config.llm.provider} | "
+    logger.info(f"Job {job_id} | topic={topic!r} | model={config.llm.model} | "
                 f"tts={config.tts.engine} | quality={config.manim.default_quality}")
 
     progress("Generating script", 10)
