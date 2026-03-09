@@ -33,7 +33,7 @@ def _build_audio_track(script: GeneratedScript, job_dir: Path) -> Path:
             current = seg.cue_offset + (seg.actual_duration or 0.0)
 
     concat = audio_dir / "concat.txt"
-    concat.write_text("\n".join(f"file '{p}'" for p in parts))
+    concat.write_text("\n".join(f"file '{Path(p).resolve()}'" for p in parts))
     out = audio_dir / "narration.mp3"
     subprocess.run([
         "ffmpeg", "-y", "-f", "concat", "-safe", "0",
@@ -52,7 +52,7 @@ def run(job_dir: Path, config) -> Path:
     render_dir = job_dir / "scenes" / "render"
     scene_list = job_dir / "scene_list.txt"
     scene_list.write_text("\n".join(
-        f"file '{render_dir / scene.id}.mp4'" for scene in script.scenes
+        f"file '{(render_dir / scene.id).with_suffix('.mp4').resolve()}'" for scene in script.scenes
     ))
     assembled = job_dir / "assembled.mp4"
     subprocess.run([

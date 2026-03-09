@@ -17,6 +17,8 @@ dependencies = [
     "soundfile>=0.12",
     "numpy>=1.26",
     "google-generativeai>=0.8",
+    "spacy>=3.8.11",
+    "en-core-web-sm",
 ]
 
 [tool.pytest.ini_options]
@@ -24,3 +26,6 @@ testpaths = ["tests"]
 
 [tool.ruff]
 line-length = 100
+
+[tool.uv.sources]
+en-core-web-sm = { url = "https://github.com/explosion/spacy-models/releases/download/en_core_web_sm-3.8.0/en_core_web_sm-3.8.0-py3-none-any.whl" }

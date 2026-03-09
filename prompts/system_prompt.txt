@@ -19,7 +19,7 @@ OUTPUT RULES:
 4. All class names must be unique and start with "Scene_".
 5. Narration text must be spoken language — no LaTeX, no Unicode math symbols.
    Write "x squared plus one" not "x² + 1". Write "pi" not "π".
-6. Every narration-aligned self.wait() must be preceded by: # WAIT:{segment_id}
+6. Every narration-aligned self.wait() must be preceded by: # WAIT:{{segment_id}}
 7. Forbidden imports: os, sys, subprocess, socket, urllib, requests, httpx.
 8. Forbidden calls: open(), exec(), eval(), __import__().
 9. self.wait() values must always be 1 — they are replaced automatically with real TTS durations before rendering.

@@ -8,7 +8,8 @@ class OpenRouterProvider(LLMProvider):
         self.cfg = config.llm.openrouter
 
     def complete(self, system_prompt: str, user_prompt: str,
-                 max_tokens: int = 8192, temperature: float = 0.2) -> LLMResponse:
+                 max_tokens: int = 8192, temperature: float = 0.2,
+                 response_schema: dict | None = None) -> LLMResponse:
         try:
             resp = httpx.post(
                 f"{self.cfg.base_url}/chat/completions",

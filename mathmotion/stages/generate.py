@@ -93,6 +93,7 @@ def run(
             resp = provider.complete(
                 system_prompt, user_prompt,
                 config.llm.max_tokens, config.llm.temperature,
+                response_schema=GeneratedScript.model_json_schema(),
             )
         except LLMError as e:
             last_error = str(e)
@@ -120,6 +121,7 @@ def run(
         (job_dir / "narration.json").write_text(script.model_dump_json(indent=2))
 
         logger.info(f"Generated {len(script.scenes)} scene(s) for: {topic!r}")
+        logger.info(f"Scene files written to: {scenes_dir.resolve()}")
         return script
 
     raise LLMError(

@@ -16,7 +16,8 @@ class GeminiProvider(LLMProvider):
         )
 
     def complete(self, system_prompt: str, user_prompt: str,
-                 max_tokens: int = 8192, temperature: float = 0.2) -> LLMResponse:
+                 max_tokens: int = 8192, temperature: float = 0.2,
+                 response_schema: dict | None = None) -> LLMResponse:
         genai = self._genai
         full_prompt = f"SYSTEM:\n{system_prompt}\n\nUSER:\n{user_prompt}"
         try:

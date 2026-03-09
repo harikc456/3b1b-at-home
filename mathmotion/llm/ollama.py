@@ -8,7 +8,9 @@ class OllamaProvider(LLMProvider):
         self.cfg = config.llm.ollama
 
     def complete(self, system_prompt: str, user_prompt: str,
-                 max_tokens: int = 8192, temperature: float = 0.2) -> LLMResponse:
+                 max_tokens: int = 8192, temperature: float = 0.2,
+                 response_schema: dict | None = None) -> LLMResponse:
+        fmt = response_schema if response_schema is not None else "json"
         try:
             resp = httpx.post(
                 f"{self.cfg.base_url}/api/generate",
@@ -17,8 +19,9 @@ class OllamaProvider(LLMProvider):
                     "system": system_prompt,
                     "prompt": user_prompt,
                     "stream": False,
-                    "format": "json",
+                    "format": fmt,
                     "options": {"temperature": temperature, "num_predict": max_tokens},
+                    "keep_alive": 0,
                 },
                 timeout=300,
             )
