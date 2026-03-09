@@ -16,3 +16,15 @@ def test_missing_env_does_not_raise():
     get_config.cache_clear()
     cfg = get_config()
     assert cfg.llm.model  # just has a model string
+
+
+def test_llm_config_repair_max_retries_default():
+    from mathmotion.utils.config import LLMConfig
+    cfg = LLMConfig(model="gemini/gemini-2.5-pro")
+    assert cfg.repair_max_retries == 3
+
+
+def test_llm_config_repair_max_retries_custom():
+    from mathmotion.utils.config import LLMConfig
+    cfg = LLMConfig(model="gemini/gemini-2.5-pro", repair_max_retries=5)
+    assert cfg.repair_max_retries == 5

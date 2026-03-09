@@ -14,9 +14,11 @@ load_dotenv(override=True)
 
 class LLMConfig(BaseModel):
     model: str
+    models: list[str] = []
     max_tokens: int = 8192
     temperature: float = 0.2
     max_retries: int = 3
+    repair_max_retries: int = 3
     timeout_seconds: int = 120
 
 
