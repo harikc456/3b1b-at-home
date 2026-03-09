@@ -19,6 +19,7 @@ dependencies = [
     "google-generativeai>=0.8",
     "spacy>=3.8.11",
     "en-core-web-sm",
+    "qwen-tts>=0.1",
 ]
 
 [tool.pytest.ini_options]

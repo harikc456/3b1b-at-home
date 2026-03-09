@@ -22,7 +22,7 @@ llm:
   timeout_seconds: 120
 
 tts:
-  engine: kokoro                # kokoro | vibevoice
+  engine: qwen3                # kokoro | vibevoice | qwen3
 
   kokoro:
     lang_code: a
@@ -43,6 +43,17 @@ tts:
       - neutral_female
       - neutral_male
       - expressive_female
+
+  qwen3:
+    model_id: Qwen/Qwen3-TTS-12Hz-0.6B-CustomVoice
+    device: cuda:0
+    use_flash_attention: false
+    voice: Vivian
+    speed: 1.0                    # accepted by interface; ignored in synthesis
+    instruct: ""
+    language: English
+    available_voices:
+      - Vivian
 
 manim:
   default_quality: standard     # draft | standard | high
