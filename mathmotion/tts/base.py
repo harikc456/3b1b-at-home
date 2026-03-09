@@ -4,7 +4,7 @@ from pathlib import Path
 
 class TTSEngine(ABC):
     @abstractmethod
-    def synthesise(self, text: str, output_path: Path, voice: str, speed: float) -> float:
+    def synthesise(self, text: str, output_path: Path, voice: str = None, speed: float = 1.0) -> float:
         """Synthesise text → WAV at output_path. Returns actual duration in seconds."""
         ...
 
