@@ -19,7 +19,7 @@ class LiteLLMProvider(LLMProvider):
                 ],
                 max_tokens=max_tokens,
                 temperature=temperature,
-                response_format={"type": "json_object"},
+                response_format={"type": "json_object"},  # response_schema ignored; json_object sufficient for all current providers
                 timeout=self.cfg.timeout_seconds,
             )
         except Exception as e:
