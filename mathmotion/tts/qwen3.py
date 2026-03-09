@@ -1,9 +1,12 @@
+import logging
 import torch
 from pathlib import Path
 import soundfile as sf
 
 from .base import TTSEngine
 from mathmotion.utils.errors import TTSError
+
+logger = logging.getLogger(__name__)
 
 
 class Qwen3Engine(TTSEngine):
@@ -21,9 +24,12 @@ class Qwen3Engine(TTSEngine):
             attn_implementation=attn,
         )
 
-    def synthesise(self, text: str, output_path: Path, voice: str = None, speed: float = 1.0) -> float:  # speed ignored: not supported by this model
+    def synthesise(self, text: str, output_path: Path, voice: str = None, speed: float = 1.0) -> float:
         if self._model is None:
             self._load_model()
+
+        if speed != 1.0:
+            logger.warning("Qwen3Engine does not support speed control; speed=%s is ignored", speed)
 
         speaker = voice or self.cfg.voice
         try:

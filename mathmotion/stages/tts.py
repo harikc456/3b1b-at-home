@@ -35,7 +35,11 @@ def run(script: GeneratedScript, job_dir: Path, config, engine: TTSEngine) -> No
     audio_dir = job_dir / "audio" / "segments"
     audio_dir.mkdir(parents=True, exist_ok=True)
 
-    tts_cfg = config.tts.kokoro if config.tts.engine == "kokoro" else config.tts.vibevoice
+    match config.tts.engine:
+        case "kokoro":    tts_cfg = config.tts.kokoro
+        case "vibevoice": tts_cfg = config.tts.vibevoice
+        case "qwen3":     tts_cfg = config.tts.qwen3
+        case n:           raise ValueError(f"Unknown TTS engine: {n!r}")
     voice = tts_cfg.voice
     speed = tts_cfg.speed
 
