@@ -1,28 +1,18 @@
 def test_config_loads(monkeypatch):
-    monkeypatch.setenv("GEMINI_API_KEY", "test-gemini-key")
-    monkeypatch.setenv("OPENROUTER_API_KEY", "test-or-key")
     from mathmotion.utils.config import get_config
     get_config.cache_clear()
     cfg = get_config()
-    assert cfg.llm.provider in ("gemini", "openrouter", "ollama")
-    assert cfg.llm.gemini.api_key == "test-gemini-key"
+    assert cfg.llm.model == "gemini/gemini-2.5-pro"
+    assert cfg.llm.max_tokens == 8192
+    assert cfg.llm.temperature == 0.2
     assert cfg.tts.engine in ("kokoro", "vibevoice", "qwen3")
     assert cfg.tts.kokoro.sample_rate == 24000
-    assert cfg.tts.qwen3.voice == "Vivian"
-    assert cfg.tts.qwen3.model_id == "Qwen/Qwen3-TTS-12Hz-0.6B-CustomVoice"
-    assert cfg.tts.qwen3.available_voices == ["Vivian"]
     assert cfg.server.port == 8000
 
 
-def test_missing_env_raises(monkeypatch):
-    monkeypatch.delenv("GEMINI_API_KEY", raising=False)
-    monkeypatch.delenv("OPENROUTER_API_KEY", raising=False)
-    from mathmotion.utils.config import get_config, ConfigError
+def test_missing_env_does_not_raise():
+    # With LiteLLM config, no env vars are required in config.yaml
+    from mathmotion.utils.config import get_config
     get_config.cache_clear()
-    try:
-        get_config()
-        assert False, "Should have raised ConfigError"
-    except ConfigError:
-        pass
-    finally:
-        get_config.cache_clear()
+    cfg = get_config()
+    assert cfg.llm.model  # just has a model string

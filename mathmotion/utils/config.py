@@ -13,29 +13,8 @@ from .errors import ConfigError
 load_dotenv(override=True)
 
 
-class GeminiConfig(BaseModel):
-    api_key: str
-    model: str
-
-
-class OpenRouterConfig(BaseModel):
-    base_url: str
-    api_key: str
-    model: str
-    site_url: str
-    site_name: str
-
-
-class OllamaConfig(BaseModel):
-    base_url: str
-    model: str
-
-
 class LLMConfig(BaseModel):
-    provider: str
-    gemini: GeminiConfig
-    openrouter: OpenRouterConfig
-    ollama: OllamaConfig
+    model: str
     max_tokens: int = 8192
     temperature: float = 0.2
     max_retries: int = 3
