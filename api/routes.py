@@ -98,9 +98,10 @@ def get_options():
     config = get_config()
     return {
         "llm_providers": ["gemini", "openrouter", "ollama"],
-        "tts_engines": ["kokoro", "vibevoice"],
+        "tts_engines": ["kokoro", "vibevoice", "qwen3"],
         "kokoro_voices": list(config.tts.kokoro.available_voices),
         "vibevoice_voices": list(config.tts.vibevoice.available_voices),
+        "qwen3_voices": list(config.tts.qwen3.available_voices),
         "qualities": ["draft", "standard", "high"],
         "levels": ["high_school", "undergraduate", "graduate"],
         "defaults": {

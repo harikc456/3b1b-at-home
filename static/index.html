@@ -258,11 +258,12 @@
       } catch {
         options = {
           llm_providers: ["gemini", "openrouter", "ollama"],
-          tts_engines: ["kokoro", "vibevoice"],
+          tts_engines: ["kokoro", "vibevoice", "qwen3"],
           kokoro_voices: ["af_heart", "af_sky", "af_bella", "bm_lewis", "bm_george"],
           vibevoice_voices: ["neutral_female", "neutral_male", "expressive_female"],
+          qwen3_voices: ["Vivian"],
           qualities: ["draft", "standard", "high"],
-          defaults: { llm_provider: "gemini", tts_engine: "kokoro", quality: "standard" },
+          defaults: { llm_provider: "gemini", tts_engine: "qwen3", quality: "standard" },
         };
       }
 
@@ -293,7 +294,7 @@
 
     function updateVoices() {
       const engine = document.getElementById("tts_engine").value;
-      const voices = engine === "kokoro" ? options.kokoro_voices : options.vibevoice_voices;
+      const voices = engine === "kokoro" ? options.kokoro_voices : engine === "vibevoice" ? options.vibevoice_voices : options.qwen3_voices;
       const group = document.getElementById("voice-group");
       if (!voices || voices.length <= 1) {
         group.style.display = "none";
