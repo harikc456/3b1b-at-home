@@ -1,10 +1,8 @@
 import logging
-import os
 import re
 import shutil
 import subprocess
 import tempfile
-from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 
 from mathmotion.schemas.script import GeneratedScript, Scene
@@ -103,32 +101,48 @@ def _fallback(scene: Scene, scenes_dir: Path, render_dir: Path, config) -> Path:
     return _render(fb_scene, scenes_dir, render_dir, "draft", config)
 
 
+def try_render_all(
+    scenes: list,
+    scenes_dir: Path,
+    render_dir: Path,
+    quality: str,
+    config,
+) -> tuple[dict, dict]:
+    """
+    Attempt one render pass for each scene (no retries).
+
+    Returns:
+        successes: {scene_id: Path}
+        failures:  {scene_id: stderr_str}
+    """
+    successes: dict = {}
+    failures: dict = {}
+    for scene in scenes:
+        try:
+            path = _render(scene, scenes_dir, render_dir, quality, config)
+            successes[scene.id] = path
+        except subprocess.TimeoutExpired:
+            stderr = f"Render timed out for {scene.id}"
+            logger.warning(f"Render timed out for {scene.id}")
+            failures[scene.id] = stderr
+        except RenderError as e:
+            logger.warning(f"Render failed for {scene.id}: {e.stderr[:200]}")
+            failures[scene.id] = e.stderr
+    return successes, failures
+
+
 def run(script: GeneratedScript, job_dir: Path, config) -> dict[str, Path]:
     quality = config.manim.default_quality
     scenes_dir = job_dir / "scenes"
     render_dir = scenes_dir / "render"
     render_dir.mkdir(parents=True, exist_ok=True)
 
-    total = len(script.scenes)
-    logger.info(f"Rendering {total} scene(s) with quality={quality!r}")
+    logger.info(f"Rendering {len(script.scenes)} scene(s) with quality={quality!r}")
+    successes, failures = try_render_all(script.scenes, scenes_dir, render_dir, quality, config)
 
-    def do(scene: Scene):
-        for attempt in range(3):
-            try:
-                return scene.id, _render(scene, scenes_dir, render_dir, quality, config)
-            except subprocess.TimeoutExpired:
-                logger.warning(f"Render attempt {attempt + 1}/3 timed out for {scene.id}")
-            except RenderError as e:
-                logger.warning(f"Render attempt {attempt + 1}/3 failed for {scene.id}: {e}")
-        logger.error(f"All render attempts failed for {scene.id} — using fallback title card")
-        return scene.id, _fallback(scene, scenes_dir, render_dir, config)
+    for scene in script.scenes:
+        if scene.id in failures:
+            logger.error(f"Scene {scene.id} failed — using fallback title card")
+            successes[scene.id] = _fallback(scene, scenes_dir, render_dir, config)
 
-    workers = max(1, (os.cpu_count() or 2) // 2)
-    results: dict[str, Path] = {}
-    with ThreadPoolExecutor(max_workers=workers) as pool:
-        futures = {pool.submit(do, scene): scene for scene in script.scenes}
-        for i, future in enumerate(as_completed(futures), 1):
-            scene_id, path = future.result()
-            results[scene_id] = path
-            logger.info(f"Render progress: {i}/{total} scenes done")
-    return results
+    return successes
