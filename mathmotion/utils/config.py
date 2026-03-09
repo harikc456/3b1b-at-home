@@ -56,10 +56,22 @@ class VibevoiceConfig(BaseModel):
     available_voices: list[str] = ["neutral_female"]
 
 
+class Qwen3Config(BaseModel):
+    model_id: str = "Qwen/Qwen3-TTS-12Hz-0.6B-CustomVoice"
+    device: str = "cuda:0"
+    use_flash_attention: bool = False
+    voice: str = "Vivian"
+    speed: float = 1.0          # accepted by interface, ignored in synthesis
+    instruct: str = ""
+    language: str = "English"
+    available_voices: list[str] = ["Vivian"]
+
+
 class TTSConfig(BaseModel):
-    engine: str = "kokoro"
+    engine: str = "qwen3"       # changed from "kokoro"
     kokoro: KokoroConfig
     vibevoice: VibevoiceConfig
+    qwen3: Qwen3Config = Qwen3Config()
 
 
 class ManimConfig(BaseModel):

@@ -6,8 +6,11 @@ def test_config_loads(monkeypatch):
     cfg = get_config()
     assert cfg.llm.provider in ("gemini", "openrouter", "ollama")
     assert cfg.llm.gemini.api_key == "test-gemini-key"
-    assert cfg.tts.engine in ("kokoro", "vibevoice")
+    assert cfg.tts.engine in ("kokoro", "vibevoice", "qwen3")
     assert cfg.tts.kokoro.sample_rate == 24000
+    assert cfg.tts.qwen3.voice == "Vivian"
+    assert cfg.tts.qwen3.model_id == "Qwen/Qwen3-TTS-12Hz-0.6B-CustomVoice"
+    assert cfg.tts.qwen3.available_voices == ["Vivian"]
     assert cfg.server.port == 8000
 
 
