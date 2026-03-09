@@ -23,3 +23,4 @@ OUTPUT RULES:
 7. Forbidden imports: os, sys, subprocess, socket, urllib, requests, httpx.
 8. Forbidden calls: open(), exec(), eval(), __import__().
 9. self.wait() values must always be 1 — they are replaced automatically with real TTS durations before rendering.
+10. Never use `from manim import *`, import only the neccessary modules

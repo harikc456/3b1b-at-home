@@ -1,6 +1,8 @@
 import json
 import logging
 import subprocess
+import sys
+import traceback
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 
@@ -60,26 +62,32 @@ def run(script: GeneratedScript, job_dir: Path, config, engine: TTSEngine) -> No
 
     def synth(scene_id: str, seg: NarrationSegment):
         logger.info(f"Synthesising {seg.id} ({len(seg.text)} chars)…")
-        out = audio_dir / seg.id
+        scene_audio_dir = audio_dir / scene_id
+        scene_audio_dir.mkdir(parents=True, exist_ok=True)
+        out = scene_audio_dir / seg.id
         fallback_duration = len(seg.text.split()) / 2.5
         try:
             duration = engine.synthesise(seg.text, out, voice=voice, speed=speed)
             mp3 = _wav_to_mp3(out.with_suffix(".wav"))
         except (TTSError, Exception) as e:
+            print(f"\n[TTS ERROR] {seg.id}: {e}", file=sys.stderr, flush=True)
+            traceback.print_exc(file=sys.stderr)
             logger.error(f"TTS failed for {seg.id}: {e} — using silence")
             mp3 = _silence(out, fallback_duration)
             duration = fallback_duration
-        return seg.id, duration, str(mp3)
+        return scene_id, seg.id, duration, str(mp3)
 
     done = 0
     with ThreadPoolExecutor(max_workers=4) as pool:
         futures = {pool.submit(synth, sid, seg): seg for sid, seg in segments}
         for future in as_completed(futures):
-            seg_id, duration, mp3_path = future.result()
+            scene_id, seg_id, duration, mp3_path = future.result()
             done += 1
             with lock:
                 data = json.loads(narration_path.read_text())
                 for scene in data["scenes"]:
+                    if scene["id"] != scene_id:
+                        continue
                     for seg in scene["narration_segments"]:
                         if seg["id"] == seg_id:
                             seg["actual_duration"] = duration

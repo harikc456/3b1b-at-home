@@ -32,4 +32,4 @@ if __name__ == "__main__":
     url = f"http://{host}:{port}"
     print(f"\n  MathMotion → {url}\n")
     webbrowser.open(url)
-    uvicorn.run("app:app", host=host, port=port, reload=False)
+    uvicorn.run("app:app", host=host, port=port, reload=False, log_config=None)

@@ -268,8 +268,8 @@
       }
 
       populate("llm_provider", options.llm_providers, options.defaults.llm_provider, label => {
-        const map = { gemini: "Gemini", openrouter: "OpenRouter", ollama: "Ollama (local)" };
-        return map[label] || label;
+        // litellm model strings are "provider/model-name" — display as-is
+        return label;
       });
 
       populate("tts_engine", options.tts_engines, options.defaults.tts_engine, label => {

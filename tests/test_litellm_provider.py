@@ -69,3 +69,23 @@ def test_model_name_property():
     config = _make_config(model="ollama/ministral-3:14b")
     provider = LiteLLMProvider(config)
     assert provider.model_name == "ollama/ministral-3:14b"
+
+
+def test_complete_plain_text_skips_response_format():
+    from mathmotion.llm.litellm import LiteLLMProvider
+    from unittest.mock import MagicMock, patch
+
+    config = _make_config()
+    provider = LiteLLMProvider(config)
+
+    mock_chunks = MagicMock()
+    mock_chunks.__iter__ = MagicMock(return_value=iter([]))
+    mock_resp = _make_litellm_response(content="def foo(): pass")
+
+    with patch("mathmotion.llm.litellm.litellm.completion", return_value=mock_chunks) as mock_call, \
+         patch("mathmotion.llm.litellm.litellm.stream_chunk_builder", return_value=mock_resp):
+        result = provider.complete("sys", "user", json_mode=False)
+
+    assert result.content == "def foo(): pass"
+    call_kwargs = mock_call.call_args.kwargs
+    assert "response_format" not in call_kwargs

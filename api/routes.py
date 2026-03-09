@@ -97,7 +97,7 @@ def get_options():
     from mathmotion.utils.config import get_config
     config = get_config()
     return {
-        "llm_model": config.llm.model,
+        "llm_providers": list(config.llm.models),
         "tts_engines": ["kokoro", "vibevoice", "qwen3"],
         "kokoro_voices": list(config.tts.kokoro.available_voices),
         "vibevoice_voices": list(config.tts.vibevoice.available_voices),
@@ -105,7 +105,7 @@ def get_options():
         "qualities": ["draft", "standard", "high"],
         "levels": ["high_school", "undergraduate", "graduate"],
         "defaults": {
-            "llm_model": config.llm.model,
+            "llm_provider": config.llm.model,
             "tts_engine": config.tts.engine,
             "quality": config.manim.default_quality,
         },
