@@ -380,7 +380,7 @@
         drop.textContent = f.name;
         drop.classList.add('has-file');
       } else {
-        drop.textContent = 'Click to select a .json file';
+        drop.innerHTML = 'Click to select a <code>.json</code> file';
         drop.classList.remove('has-file');
       }
     });
@@ -409,7 +409,15 @@
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ topic, quality, level: document.getElementById("level").value, tts_engine, llm_provider, voice }),
         });
-        ({ job_id } = await res.json());
+        const genData = await res.json();
+        if (genData.detail || genData.error) {
+          const errEl = document.getElementById("error-msg");
+          errEl.textContent = "Error: " + (genData.detail || genData.error);
+          errEl.style.display = "block";
+          document.getElementById("submit").disabled = false;
+          return;
+        }
+        ({ job_id } = genData);
 
       } else {
         const fileInput = document.getElementById("file-input");
@@ -478,6 +486,7 @@
       clearInterval(pollTimer);
       document.getElementById("status-card").style.display = "none";
       document.getElementById("submit").disabled = false;
+      setMode('generate');
       document.getElementById("topic").focus();
     }
 
