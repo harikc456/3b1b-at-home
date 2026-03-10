@@ -114,7 +114,7 @@ def run(
     if script is None:
         script = generate.run(topic, job_dir, config, provider, level=level)
     else:
-        # Caller is responsible for validating the script (e.g. via generate._validate()).
+        # Caller is responsible for validating the script (e.g. via generate.validate_script()).
         # We trust the provided script and write files directly.
         (job_dir / "scenes").mkdir(parents=True, exist_ok=True)
         for scene in script.scenes:
