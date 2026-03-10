@@ -59,3 +59,26 @@ def test_upload_invalid_schema_returns_error():
         files={"file": ("script.json", json.dumps(bad_script), "application/json")},
     )
     assert resp.status_code == 400
+
+
+def test_upload_forbidden_import_returns_error():
+    forbidden_script = {
+        "title": "Test",
+        "topic": "derivatives",
+        "scenes": [
+            {
+                "id": "scene_a",
+                "class_name": "SceneA",
+                "manim_code": "import os\nfrom manim import *\nclass SceneA(Scene):\n    def construct(self): pass",
+                "narration_segments": [
+                    {"id": "seg_1", "text": "Hello world", "cue_offset": 0.0}
+                ],
+            }
+        ],
+    }
+    resp = client.post(
+        "/api/generate-from-script",
+        files={"file": ("script.json", json.dumps(forbidden_script), "application/json")},
+    )
+    assert resp.status_code == 400
+    assert "forbidden" in resp.json()["detail"].lower()
