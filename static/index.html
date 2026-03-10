@@ -182,6 +182,49 @@
     .btn-download:hover { background: #047857; }
     .btn-new { background: #1e293b; color: #94a3b8; border: 1px solid #334155; }
     .btn-new:hover { background: #334155; }
+
+    .mode-toggle {
+      display: flex;
+      gap: 0;
+      margin-bottom: 1.5rem;
+      border-radius: 8px;
+      overflow: hidden;
+      border: 1px solid #2d2d4e;
+      width: fit-content;
+    }
+
+    .mode-btn {
+      padding: 0.5rem 1.2rem;
+      background: #0f0f1a;
+      color: #6b7280;
+      border: none;
+      font-size: 0.85rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background 0.15s, color 0.15s;
+    }
+
+    .mode-btn.active {
+      background: #7c3aed;
+      color: #fff;
+    }
+
+    .file-drop {
+      width: 100%;
+      background: #0f0f1a;
+      border: 1.5px dashed #2d2d4e;
+      border-radius: 8px;
+      color: #6b7280;
+      font-size: 0.9rem;
+      padding: 1.5rem;
+      text-align: center;
+      cursor: pointer;
+      transition: border-color 0.15s;
+    }
+
+    .file-drop:hover, .file-drop.has-file { border-color: #7c3aed; color: #e0e0f0; }
+
+    #file-input { display: none; }
   </style>
 </head>
 <body>
@@ -189,8 +232,20 @@
   <p class="subtitle">Type a math topic — get an animated video explanation</p>
 
   <div class="card">
+    <div class="mode-toggle">
+      <button class="mode-btn active" id="mode-generate" onclick="setMode('generate')">Generate</button>
+      <button class="mode-btn" id="mode-upload" onclick="setMode('upload')">Upload Script</button>
+    </div>
     <label for="topic">Topic</label>
     <textarea id="topic" placeholder="e.g. Explain what a derivative is and why it matters geometrically"></textarea>
+
+    <div id="upload-group" style="display:none">
+      <label>Script JSON</label>
+      <div class="file-drop" id="file-drop" onclick="document.getElementById('file-input').click()">
+        Click to select a <code>.json</code> file
+      </div>
+      <input type="file" id="file-input" accept=".json" />
+    </div>
 
     <div>
       <label for="level">Level</label>
@@ -304,10 +359,33 @@
       populate("voice", voices, voices[0]);
     }
 
-    document.getElementById("submit").addEventListener("click", async () => {
-      const topic = document.getElementById("topic").value.trim();
-      if (!topic) { alert("Please enter a topic."); return; }
+    let currentMode = 'generate';
 
+    function setMode(mode) {
+      currentMode = mode;
+      document.getElementById('mode-generate').classList.toggle('active', mode === 'generate');
+      document.getElementById('mode-upload').classList.toggle('active', mode === 'upload');
+      const topicLabel = document.querySelector('label[for="topic"]');
+      const topicTA = document.getElementById('topic');
+      const uploadGroup = document.getElementById('upload-group');
+      topicLabel.style.display = mode === 'generate' ? '' : 'none';
+      topicTA.style.display = mode === 'generate' ? '' : 'none';
+      uploadGroup.style.display = mode === 'upload' ? '' : 'none';
+    }
+
+    document.getElementById('file-input').addEventListener('change', (e) => {
+      const f = e.target.files[0];
+      const drop = document.getElementById('file-drop');
+      if (f) {
+        drop.textContent = f.name;
+        drop.classList.add('has-file');
+      } else {
+        drop.textContent = 'Click to select a .json file';
+        drop.classList.remove('has-file');
+      }
+    });
+
+    document.getElementById("submit").addEventListener("click", async () => {
       document.getElementById("submit").disabled = true;
       document.getElementById("status-card").style.display = "block";
       document.getElementById("video-section").style.display = "none";
@@ -315,21 +393,51 @@
       setProgress("Starting…", 0);
 
       const voiceEl = document.getElementById("voice");
-      const body = {
-        topic,
-        quality:      document.getElementById("quality").value,
-        level:        document.getElementById("level").value,
-        tts_engine:   document.getElementById("tts_engine").value,
-        llm_provider: document.getElementById("llm_provider").value,
-        voice:        voiceEl && voiceEl.offsetParent ? voiceEl.value : null,
-      };
+      const quality = document.getElementById("quality").value;
+      const tts_engine = document.getElementById("tts_engine").value;
+      const llm_provider = document.getElementById("llm_provider").value;
+      const voice = voiceEl && voiceEl.offsetParent ? voiceEl.value : null;
 
-      const res = await fetch("/api/generate", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body),
-      });
-      const { job_id } = await res.json();
+      let job_id;
+
+      if (currentMode === 'generate') {
+        const topic = document.getElementById("topic").value.trim();
+        if (!topic) { alert("Please enter a topic."); document.getElementById("submit").disabled = false; return; }
+
+        const res = await fetch("/api/generate", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ topic, quality, level: document.getElementById("level").value, tts_engine, llm_provider, voice }),
+        });
+        ({ job_id } = await res.json());
+
+      } else {
+        const fileInput = document.getElementById("file-input");
+        if (!fileInput.files.length) { alert("Please select a JSON file."); document.getElementById("submit").disabled = false; return; }
+
+        const text = await fileInput.files[0].text();
+        try { JSON.parse(text); } catch { alert("File is not valid JSON."); document.getElementById("submit").disabled = false; return; }
+
+        const fd = new FormData();
+        fd.append("file", fileInput.files[0]);
+        if (quality) fd.append("quality", quality);
+        if (tts_engine) fd.append("tts_engine", tts_engine);
+        if (llm_provider) fd.append("llm_provider", llm_provider);
+        if (voice) fd.append("voice", voice);
+        fd.append("level", document.getElementById("level").value);
+
+        const res = await fetch("/api/generate-from-script", { method: "POST", body: fd });
+        const data = await res.json();
+        if (data.detail || data.error) {
+          const errEl = document.getElementById("error-msg");
+          errEl.textContent = "Error: " + (data.detail || data.error);
+          errEl.style.display = "block";
+          document.getElementById("submit").disabled = false;
+          return;
+        }
+        ({ job_id } = data);
+      }
+
       pollTimer = setInterval(() => poll(job_id), 2000);
     });
 
