@@ -77,6 +77,7 @@ def run(
     tts_engine: Optional[str] = None,
     llm_provider: Optional[str] = None,
     progress_callback: Optional[Callable[[str, int], None]] = None,
+    script: Optional[GeneratedScript] = None,
 ) -> Path:
     def progress(step: str, pct: int) -> None:
         logger.info(f"[{pct}%] {step}")
@@ -102,9 +103,16 @@ def run(
     logger.info(f"Job {job_id} | topic={topic!r} | model={config.llm.model} | "
                 f"tts={config.tts.engine} | quality={config.manim.default_quality}")
 
-    progress("Generating script", 10)
+    progress("Preparing script" if script is not None else "Generating script", 10)
     provider = get_provider(config)
-    script = generate.run(topic, job_dir, config, provider, level=level)
+    if script is None:
+        script = generate.run(topic, job_dir, config, provider, level=level)
+    else:
+        scenes_dir = job_dir / "scenes"
+        scenes_dir.mkdir(parents=True, exist_ok=True)
+        for scene in script.scenes:
+            (scenes_dir / f"{scene.id}.py").write_text(scene.manim_code)
+        (job_dir / "narration.json").write_text(script.model_dump_json(indent=2))
 
     progress("Synthesising audio", 30)
     engine = get_engine(config)
