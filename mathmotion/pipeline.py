@@ -79,6 +79,12 @@ def run(
     progress_callback: Optional[Callable[[str, int], None]] = None,
     script: Optional[GeneratedScript] = None,
 ) -> Path:
+    """Run the full mathmotion pipeline for the given topic.
+
+    When ``script`` is provided, the generate stage is skipped; scene files and
+    ``narration.json`` are written directly from the provided object.  ``provider``
+    is still constructed because it is needed for the repair loop.
+    """
     def progress(step: str, pct: int) -> None:
         logger.info(f"[{pct}%] {step}")
         if progress_callback:
@@ -108,10 +114,11 @@ def run(
     if script is None:
         script = generate.run(topic, job_dir, config, provider, level=level)
     else:
-        scenes_dir = job_dir / "scenes"
-        scenes_dir.mkdir(parents=True, exist_ok=True)
+        # Caller is responsible for validating the script (e.g. via generate._validate()).
+        # We trust the provided script and write files directly.
+        (job_dir / "scenes").mkdir(parents=True, exist_ok=True)
         for scene in script.scenes:
-            (scenes_dir / f"{scene.id}.py").write_text(scene.manim_code)
+            (job_dir / "scenes" / f"{scene.id}.py").write_text(scene.manim_code)
         (job_dir / "narration.json").write_text(script.model_dump_json(indent=2))
 
     progress("Synthesising audio", 30)
