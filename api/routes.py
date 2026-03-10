@@ -1,3 +1,4 @@
+import json
 import threading
 import uuid
 from pathlib import Path
@@ -73,26 +74,26 @@ def start_generate(req: GenerateRequest):
 
 
 @router.post("/generate-from-script")
-async def start_generate_from_script(
+def start_generate_from_script(
     file: UploadFile = File(...),
     quality: Optional[str] = Form(None),
     tts_engine: Optional[str] = Form(None),
     voice: Optional[str] = Form(None),
     llm_provider: Optional[str] = Form(None),
+    level: Optional[str] = Form(None),
 ):
-    import json as _json
     from mathmotion.schemas.script import GeneratedScript
-    from mathmotion.stages.generate import _validate
+    from mathmotion.stages.generate import validate_script
     from mathmotion.utils.errors import ValidationError
 
-    content = await file.read()
+    content = file.file.read()
     try:
-        data = _json.loads(content)
-    except _json.JSONDecodeError as e:
+        data = json.loads(content)
+    except json.JSONDecodeError as e:
         raise HTTPException(status_code=400, detail=f"Invalid JSON: {e}")
 
     try:
-        script = _validate(data)
+        script = validate_script(data)
     except ValidationError as e:
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
@@ -123,6 +124,7 @@ async def start_generate_from_script(
                 topic=script.topic,
                 config=cfg,
                 quality=quality,
+                level=level or "undergraduate",
                 tts_engine=tts_engine,
                 voice=voice,
                 llm_provider=llm_provider,

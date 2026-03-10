@@ -23,7 +23,7 @@ def _detect_domains(topic: str) -> list[str]:
     return [d for d, kws in DOMAIN_MAP.items() if any(kw in t for kw in kws)]
 
 
-def _validate(data: dict) -> GeneratedScript:
+def validate_script(data: dict) -> GeneratedScript:
     """Run all validation checks. Raises ValidationError with a message suitable for retry."""
     try:
         script = GeneratedScript.model_validate(data)
@@ -106,7 +106,7 @@ def run(
             continue
 
         try:
-            script = _validate(data)
+            script = validate_script(data)
         except ValidationError as e:
             last_error = str(e)
             continue
