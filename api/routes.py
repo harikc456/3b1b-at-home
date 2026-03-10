@@ -3,7 +3,7 @@ import uuid
 from pathlib import Path
 from typing import Optional
 
-from fastapi import APIRouter
+from fastapi import APIRouter, File, Form, HTTPException, UploadFile
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
 
@@ -58,6 +58,76 @@ def start_generate(req: GenerateRequest):
                 tts_engine=req.tts_engine,
                 llm_provider=req.llm_provider,
                 progress_callback=on_progress,
+            )
+            _jobs[job_id]["status"] = "complete"
+            _jobs[job_id]["output"] = str(output)
+            _jobs[job_id]["pct"] = 100
+            _jobs[job_id]["step"] = "Done"
+        except Exception as e:
+            _jobs[job_id]["status"] = "failed"
+            _jobs[job_id]["error"] = str(e)
+            _jobs[job_id]["step"] = "Failed"
+
+    threading.Thread(target=_run, daemon=True).start()
+    return {"job_id": job_id}
+
+
+@router.post("/generate-from-script")
+async def start_generate_from_script(
+    file: UploadFile = File(...),
+    quality: Optional[str] = Form(None),
+    tts_engine: Optional[str] = Form(None),
+    voice: Optional[str] = Form(None),
+    llm_provider: Optional[str] = Form(None),
+):
+    import json as _json
+    from mathmotion.schemas.script import GeneratedScript
+    from mathmotion.stages.generate import _validate
+    from mathmotion.utils.errors import ValidationError
+
+    content = await file.read()
+    try:
+        data = _json.loads(content)
+    except _json.JSONDecodeError as e:
+        raise HTTPException(status_code=400, detail=f"Invalid JSON: {e}")
+
+    try:
+        script = _validate(data)
+    except ValidationError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Validation error: {e}")
+
+    job_id = f"job_{uuid.uuid4().hex[:8]}"
+    _jobs[job_id] = {
+        "status": "running",
+        "step": "Starting…",
+        "pct": 0,
+        "output": None,
+        "error": None,
+    }
+
+    def _run():
+        from mathmotion.utils.config import get_config as _get
+        _get.cache_clear()
+        cfg = _get()
+
+        try:
+            from mathmotion.pipeline import run as run_pipeline
+
+            def on_progress(step: str, pct: int):
+                _jobs[job_id]["step"] = step
+                _jobs[job_id]["pct"] = pct
+
+            output = run_pipeline(
+                topic=script.topic,
+                config=cfg,
+                quality=quality,
+                tts_engine=tts_engine,
+                voice=voice,
+                llm_provider=llm_provider,
+                progress_callback=on_progress,
+                script=script,
             )
             _jobs[job_id]["status"] = "complete"
             _jobs[job_id]["output"] = str(output)
