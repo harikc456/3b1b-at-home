@@ -8,7 +8,7 @@ Type a topic like *"Explain what a derivative is"* and get an `.mp4` with Manim 
 
 ## Example output
 
-<video src="assets/example.mp4" controls width="100%"></video>
+https://github.com/user-attachments/assets/7b0116eb-709a-42c9-a214-ba8d63043767
 
 ---
 
