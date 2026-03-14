@@ -6,6 +6,12 @@ Type a topic like *"Explain what a derivative is"* and get an `.mp4` with Manim 
 
 ---
 
+## Example output
+
+<video src="assets/example.mp4" controls width="100%"></video>
+
+---
+
 ## How it works
 
 ```
