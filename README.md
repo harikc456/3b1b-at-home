@@ -15,21 +15,28 @@ https://github.com/user-attachments/assets/7b0116eb-709a-42c9-a214-ba8d63043767
 ## How it works
 
 ```
-Your topic
+Your topic  (or upload a pre-generated JSON script)
    │
    ▼
 LLM generates Manim animation code + narration script
    │
-   ├─────────────────────┐
-   ▼                     ▼
-Manim renders video   Kokoro/Vibevoice synthesises audio   ← runs in parallel
-   │                     │
-   └──────────┬──────────┘
-              ▼
-         FFmpeg combines into final.mp4
-              │
-              ▼
-         Plays in your browser
+   ▼
+Qwen3/Kokoro/Vibevoice synthesises audio
+   │
+   ▼
+Audio durations injected into scene code
+   │
+   ▼
+Manim renders video
+   │
+   ▼ (if render fails)
+LLM repairs scene code → re-render  (up to repair_max_retries times)
+   │
+   ▼
+FFmpeg combines video + audio into final.mp4
+   │
+   ▼
+Plays in your browser
 ```
 
 ---
@@ -54,6 +61,7 @@ sudo apt install \
 |---|---|---|
 | Gemini (default) | `GEMINI_API_KEY` | Free tier available at [aistudio.google.com](https://aistudio.google.com) |
 | OpenRouter | `OPENROUTER_API_KEY` | Optional alternative |
+| Fireworks AI | `FIREWORKS_AI_API_KEY` | Fast inference, e.g. `fireworks_ai/minimax-m2p5` |
 | Ollama | — | Free, runs locally — install [Ollama](https://ollama.com) separately |
 
 ---
@@ -82,6 +90,13 @@ The browser opens automatically at `http://127.0.0.1:8000`.
 
 ## Using the web UI
 
+There are two modes, toggled at the top of the page:
+
+- **Generate** (default) — describe a topic and let the LLM write the script
+- **Upload Script** — skip LLM generation by uploading a pre-generated JSON script file
+
+### Generate mode
+
 1. **Type a topic** — anything mathematical, e.g.:
    - *"Explain the geometric intuition behind eigenvalues"*
    - *"What is the Fourier transform and why does it matter?"*
@@ -94,13 +109,19 @@ The browser opens automatically at `http://127.0.0.1:8000`.
    | Level | High School / Undergraduate / Graduate | Adjusts explanation depth |
    | Duration | 1 – 5 minutes | Target length |
    | Quality | Draft / Standard / High | Draft is fastest for testing |
-   | AI Model | Gemini / OpenRouter / Ollama | Must have the key configured |
-   | Voice Engine | Kokoro / Vibevoice | Kokoro has better quality |
+   | AI Model | Gemini / OpenRouter / Fireworks / Ollama | Must have the key configured |
+   | Voice Engine | Qwen3 / Kokoro / Vibevoice | Qwen3 is the default |
    | Voice | Various | Depends on chosen engine |
 
 3. **Click Generate Video** and wait. Progress is shown live.
 
 4. The video plays inline when done. Use the **Download** button to save it.
+
+### Upload Script mode
+
+1. **Select a JSON script file** — must match the `GeneratedScript` schema (the same format saved in `jobs/<id>/narration.json`)
+2. **Choose settings** — same options as Generate mode, except AI Model (only used for the repair loop)
+3. **Click Generate Video** — the generate stage is skipped; rendering starts from your script directly
 
 ---
 
@@ -110,17 +131,15 @@ All settings live in `config.yaml`. Key things you might want to change:
 
 ```yaml
 llm:
-  provider: gemini          # Switch to openrouter or ollama
+  model: gemini/gemini-2.5-pro  # any litellm model string
+  repair_max_retries: 3         # LLM repair attempts per failed scene
 
 tts:
-  engine: kokoro            # Switch to vibevoice
+  engine: qwen3             # qwen3 | kokoro | vibevoice
 
 manim:
   default_quality: standard # draft | standard | high
   background_color: "#1a1a2e"
-
-composition:
-  sync_strategy: time_stretch  # or audio_led (higher quality, slower)
 
 server:
   host: 127.0.0.1
@@ -131,7 +150,7 @@ server:
 
 1. Install Ollama: [ollama.com](https://ollama.com)
 2. Pull a model: `ollama pull gemma3:27b`
-3. Edit `config.yaml`: set `llm.provider: ollama`
+3. Edit `config.yaml`: set `llm.model: ollama/gemma3:27b`
 
 ---
 
@@ -152,6 +171,7 @@ server:
 │   ├── stages/
 │   │   ├── generate.py     # LLM → Manim code + narration
 │   │   ├── render.py       # Manim → video files
+│   │   ├── repair.py       # LLM-driven scene code repair
 │   │   ├── tts.py          # Text → audio files
 │   │   └── compose.py      # Video + audio → final.mp4
 │   ├── schemas/            # Pydantic models
@@ -189,3 +209,6 @@ uv run --no-sync pytest tests/ -v
 
 **`GEMINI_API_KEY` not found**
 → Make sure `.env` exists and contains the key — copy from `.env.example`
+
+**Qwen3 TTS fails / CUDA error**
+→ Qwen3 requires a CUDA GPU. Switch to `kokoro` or `vibevoice` in `config.yaml` if running CPU-only
