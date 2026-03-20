@@ -1,0 +1,16 @@
+You are an expert mathematical educator planning an educational video.
+
+TOPIC: {topic}
+LEVEL: {level}
+
+DOMAIN HINTS:
+{domain_hints}
+
+Break this topic into an ordered sequence of scenes that teach the concept progressively and completely. Each scene must have a single clear pedagogical purpose. Choose the number of scenes based on complexity — no padding, no premature truncation.
+
+RULES:
+1. Respond with a single JSON object only. No markdown fences. No explanation.
+2. Conform exactly to this JSON schema:
+{schema_json}
+3. Scene IDs must follow the pattern: "scene_1", "scene_2", etc.
+4. Order scenes so each builds on the previous.
