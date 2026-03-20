@@ -56,6 +56,7 @@ def _generate_scene(
             last_error = f"Invalid JSON: {e}"
             continue
 
+        data["id"] = scene_script.id  # enforce ID — don't trust LLM
         try:
             scene = Scene.model_validate(data)
         except Exception as e:
