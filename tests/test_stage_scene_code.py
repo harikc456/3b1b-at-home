@@ -123,11 +123,9 @@ def test_run_raises_llm_error_naming_failed_scenes(tmp_path):
     provider = _make_provider("not valid json")
     cfg = _make_config(max_retries=0)
 
-    try:
+    import pytest
+    with pytest.raises(LLMError, match="scene_1"):
         run(_make_scripts(), _make_outline(), tmp_path, cfg, provider)
-        assert False, "Should have raised LLMError"
-    except LLMError as e:
-        assert "scene_1" in str(e)
 
 
 def test_run_passes_outline_and_scene_script_to_provider(tmp_path):
