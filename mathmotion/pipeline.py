@@ -84,9 +84,10 @@ def run(
 ) -> Path:
     """Run the full mathmotion pipeline for the given topic.
 
-    When ``script`` is provided, the generate stage is skipped; scene files and
-    ``narration.json`` are written directly from the provided object.  ``provider``
-    is still constructed because it is needed for the repair loop.
+    When ``script`` is provided, the outline, scene-script, and scene-code stages
+    are skipped; scene files and ``narration.json`` are written directly from the
+    provided object.  ``provider`` is still constructed because it is needed for
+    the repair loop.
     """
     def progress(step: str, pct: int) -> None:
         logger.info(f"[{pct}%] {step}")

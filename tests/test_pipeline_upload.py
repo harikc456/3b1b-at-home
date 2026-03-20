@@ -30,7 +30,7 @@ SAMPLE_SCRIPT = GeneratedScript(
 
 
 def test_pipeline_skips_generate_when_script_provided(tmp_path):
-    """When script= is passed, generate.run must NOT be called."""
+    """When script= is passed, the three generation stages must NOT be called."""
     cfg = MagicMock()
     cfg.manim.default_quality = "draft"
     cfg.storage.jobs_dir = str(tmp_path)
