@@ -83,7 +83,7 @@ def start_generate_from_script(
     level: Optional[str] = Form(None),
 ):
     from mathmotion.schemas.script import GeneratedScript
-    from mathmotion.stages.generate import validate_script
+    from mathmotion.utils.validation import validate_script
     from mathmotion.utils.errors import ValidationError
 
     content = file.file.read()
