@@ -52,13 +52,13 @@ class AnimationStep(BaseModel):
     action: str
     target: str
     timing: str
-    parameters: dict[str, str | float | int]
+    parameters: dict[str, int | float | str]
 
 
 class AnimationDescription(BaseModel):
     objects: list[AnimationObject]
     sequence: list[AnimationStep]
-    notes: str
+    notes: str = ""
 
 
 class SceneScript(BaseModel):

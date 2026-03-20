@@ -14,7 +14,7 @@ def test_topic_outline_valid():
     assert outline.scenes[0].id == "scene_1"
 
 
-def test_topic_outline_rejects_empty_scenes():
+def test_topic_outline_rejects_wrong_type_for_scenes():
     from mathmotion.schemas.script import TopicOutline
     with pytest.raises(ValidationError):
         TopicOutline(title="X", topic="x", level="undergraduate", scenes="not-a-list")
