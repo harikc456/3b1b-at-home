@@ -4,7 +4,7 @@ from pathlib import Path
 
 from mathmotion.llm.base import LLMProvider
 from mathmotion.schemas.script import TopicOutline
-from mathmotion.utils.errors import LLMError, ValidationError
+from mathmotion.utils.errors import LLMError
 
 logger = logging.getLogger(__name__)
 
