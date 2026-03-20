@@ -45,7 +45,9 @@ def test_pipeline_skips_generate_when_script_provided(tmp_path):
         patch("mathmotion.pipeline.inject_actual_durations", side_effect=lambda text, _: text),
         patch("mathmotion.pipeline._run_render_repair_loop", return_value={}),
         patch("mathmotion.pipeline.compose.run", return_value=tmp_path / "out.mp4"),
-        patch("mathmotion.pipeline.generate.run") as mock_generate,
+        patch("mathmotion.pipeline.outline_stage.run") as mock_outline,
+        patch("mathmotion.pipeline.scene_script_stage.run") as mock_scripts,
+        patch("mathmotion.pipeline.scene_code_stage.run") as mock_code,
     ):
         from mathmotion.pipeline import run as pipeline_run
         pipeline_run(
@@ -54,7 +56,9 @@ def test_pipeline_skips_generate_when_script_provided(tmp_path):
             script=SAMPLE_SCRIPT,
         )
 
-        mock_generate.assert_not_called()
+        mock_outline.assert_not_called()
+        mock_scripts.assert_not_called()
+        mock_code.assert_not_called()
 
 
 def test_pipeline_writes_files_when_script_provided(tmp_path):
@@ -81,7 +85,9 @@ def test_pipeline_writes_files_when_script_provided(tmp_path):
         patch("mathmotion.pipeline.inject_actual_durations", side_effect=lambda text, _: text),
         patch("mathmotion.pipeline._run_render_repair_loop", return_value={}),
         patch("mathmotion.pipeline.compose.run", return_value=tmp_path / "out.mp4"),
-        patch("mathmotion.pipeline.generate.run"),
+        patch("mathmotion.pipeline.outline_stage.run"),
+        patch("mathmotion.pipeline.scene_script_stage.run"),
+        patch("mathmotion.pipeline.scene_code_stage.run"),
     ):
         from mathmotion.pipeline import run as pipeline_run
         pipeline_run(

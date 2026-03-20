@@ -6,7 +6,10 @@ from typing import Callable, Optional
 
 from mathmotion.llm.factory import get_provider
 from mathmotion.schemas.script import GeneratedScript
-from mathmotion.stages import generate, render, repair, tts, compose
+from mathmotion.stages import outline as outline_stage
+from mathmotion.stages import scene_script as scene_script_stage
+from mathmotion.stages import scene_code as scene_code_stage
+from mathmotion.stages import render, repair, tts, compose
 from mathmotion.stages.render import inject_actual_durations
 from mathmotion.tts.factory import get_engine
 from mathmotion.utils.config import Config
@@ -109,10 +112,14 @@ def run(
     logger.info(f"Job {job_id} | topic={topic!r} | model={config.llm.model} | "
                 f"tts={config.tts.engine} | quality={config.manim.default_quality}")
 
-    progress("Preparing script" if script is not None else "Generating script", 10)
+    progress("Preparing script" if script is not None else "Generating outline", 10)
     provider = get_provider(config)
     if script is None:
-        script = generate.run(topic, job_dir, config, provider, level=level)
+        outline_result = outline_stage.run(topic, job_dir, config, provider, level=level)
+        progress("Writing scene scripts", 20)
+        scripts_result = scene_script_stage.run(outline_result, job_dir, config, provider)
+        progress("Generating scene code", 35)
+        script = scene_code_stage.run(scripts_result, outline_result, job_dir, config, provider)
     else:
         # Caller is responsible for validating the script (e.g. via mathmotion.utils.validation.validate_script()).
         # We trust the provided script and write files directly.
@@ -121,11 +128,11 @@ def run(
             (job_dir / "scenes" / f"{scene.id}.py").write_text(scene.manim_code)
         (job_dir / "narration.json").write_text(script.model_dump_json(indent=2))
 
-    progress("Synthesising audio", 30)
+    progress("Synthesising audio", 45)
     engine = get_engine(config)
     tts.run(script, job_dir, config, engine)
 
-    progress("Injecting durations into scene code", 55)
+    progress("Injecting durations into scene code", 60)
     script = GeneratedScript.model_validate(
         json.loads((job_dir / "narration.json").read_text())
     )
@@ -141,10 +148,10 @@ def run(
         if scene_file.exists():
             scene_file.write_text(inject_actual_durations(scene_file.read_text(), durations))
 
-    progress("Rendering animation", 65)
+    progress("Rendering animation", 70)
     _run_render_repair_loop(script, job_dir, config, provider)
 
-    progress("Composing final video", 85)
+    progress("Composing final video", 88)
     final = compose.run(job_dir, config)
 
     progress("Done", 100)
