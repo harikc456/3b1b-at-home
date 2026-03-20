@@ -102,16 +102,15 @@ def test_run_writes_scene_files_and_narration_json(tmp_path):
 
 
 def test_run_does_not_write_files_if_any_scene_fails(tmp_path):
+    import pytest
     from mathmotion.stages.scene_code import run
     from mathmotion.utils.errors import LLMError
 
     provider = _make_provider("not valid json")
     cfg = _make_config(max_retries=0)
 
-    try:
+    with pytest.raises(LLMError):
         run(_make_scripts(), _make_outline(), tmp_path, cfg, provider)
-    except LLMError:
-        pass
 
     assert not (tmp_path / "narration.json").exists()
     assert not (tmp_path / "scenes").exists()
@@ -164,3 +163,16 @@ def test_run_retries_per_scene_on_invalid_json(tmp_path):
     assert isinstance(result, GeneratedScript)
     assert result.scenes[0].class_name == "Scene_Intro"
     assert provider.complete.call_count == 2
+
+
+def test_run_passes_schema_to_provider(tmp_path):
+    from mathmotion.stages.scene_code import run
+    from mathmotion.schemas.script import Scene
+
+    provider = _make_provider(VALID_SCENE_JSON)
+    cfg = _make_config()
+
+    run(_make_scripts(), _make_outline(), tmp_path, cfg, provider)
+
+    call_kwargs = provider.complete.call_args.kwargs
+    assert call_kwargs["response_schema"] == Scene.model_json_schema()

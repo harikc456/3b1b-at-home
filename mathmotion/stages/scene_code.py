@@ -1,4 +1,3 @@
-import ast
 import json
 import logging
 from pathlib import Path
@@ -8,36 +7,9 @@ from mathmotion.schemas.script import (
     AllSceneScripts, GeneratedScript, Scene, TopicOutline,
 )
 from mathmotion.utils.errors import LLMError, ValidationError
-from mathmotion.utils.validation import (
-    check_forbidden_imports, check_forbidden_calls,
-)
+from mathmotion.utils.validation import validate_scene_item
 
 logger = logging.getLogger(__name__)
-
-
-def _validate_scene(scene: Scene) -> None:
-    """Raises ValidationError if scene code fails any check."""
-    try:
-        ast.parse(scene.manim_code)
-    except SyntaxError as e:
-        raise ValidationError(f"Syntax error: {e}")
-
-    bad = check_forbidden_imports(scene.manim_code)
-    if bad:
-        raise ValidationError(f"Forbidden imports: {bad}")
-
-    bad = check_forbidden_calls(scene.manim_code)
-    if bad:
-        raise ValidationError(f"Forbidden calls: {bad}")
-
-    if scene.class_name not in scene.manim_code:
-        raise ValidationError(
-            f"class_name '{scene.class_name}' not found in manim_code"
-        )
-
-    for seg in scene.narration_segments:
-        if not seg.text.strip():
-            raise ValidationError(f"Narration segment {seg.id} has empty text")
 
 
 def _generate_scene(
@@ -45,12 +17,12 @@ def _generate_scene(
     outline: TopicOutline,
     config,
     provider: LLMProvider,
+    prompt_template: str,
 ) -> Scene:
     """Generate Manim code for one scene. Returns Scene or raises LLMError."""
     schema_json = json.dumps(Scene.model_json_schema(), indent=2)
     system_prompt = (
-        Path("prompts/scene_code.txt")
-        .read_text()
+        prompt_template
         .replace("{outline_json}", outline.model_dump_json(indent=2))
         .replace("{scene_script_json}", scene_script.model_dump_json(indent=2))
         .replace("{schema_json}", schema_json)
@@ -91,7 +63,7 @@ def _generate_scene(
             continue
 
         try:
-            _validate_scene(scene)
+            validate_scene_item(scene)
         except ValidationError as e:
             last_error = str(e)
             continue
@@ -112,12 +84,13 @@ def run(
     provider: LLMProvider,
 ) -> GeneratedScript:
     """Generate Manim code for all scenes. Raises LLMError if any scene fails."""
+    prompt_template = Path("prompts/scene_code.txt").read_text()
     generated: list[Scene] = []
     failures: list[str] = []
 
     for scene_script in scripts.scenes:
         try:
-            scene = _generate_scene(scene_script, outline, config, provider)
+            scene = _generate_scene(scene_script, outline, config, provider, prompt_template)
             generated.append(scene)
             logger.info(f"Generated code for scene: {scene_script.id}")
         except LLMError as e:
