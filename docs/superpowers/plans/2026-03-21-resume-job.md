@@ -582,6 +582,37 @@ def test_narration_bak_not_overwritten_on_resume(tmp_path):
         run(topic="d", config=cfg, job_id=tmp_path.name, start_from_stage="tts")
 
     assert (tmp_path / "narration.json.bak").read_text() == original_bak
+
+
+def test_narration_bak_not_created_when_tts_skipped(tmp_path):
+    """When start_from_stage='compose', TTS is skipped and no .bak is created."""
+    from mathmotion.pipeline import run
+
+    (tmp_path / "outline.json").write_text(json.dumps(MINIMAL_OUTLINE))
+    scene_scripts = {
+        "title": "D", "topic": "d",
+        "scenes": [{"id": "scene_1", "title": "S", "narration": "hi",
+                    "animation_description": {"objects": [], "sequence": [], "notes": ""}}],
+    }
+    (tmp_path / "scene_scripts.json").write_text(json.dumps(scene_scripts))
+    (tmp_path / "narration.json").write_text(json.dumps(MINIMAL_NARRATION))  # has durations
+    (tmp_path / "scenes").mkdir()
+    (tmp_path / "scenes" / "scene_1.py").write_text("")
+    render_dir = tmp_path / "scenes" / "render"
+    render_dir.mkdir()
+    (render_dir / "scene_1.mp4").write_bytes(b"fake")
+
+    cfg = MagicMock()
+    cfg.storage.jobs_dir = str(tmp_path.parent)
+    cfg.manim.default_quality = "draft"
+    cfg.llm.model = "gemini"
+    cfg.composition.output_preset = "ultrafast"
+    cfg.composition.output_crf = 23
+
+    with patch("mathmotion.stages.compose.run", return_value=tmp_path / "output" / "final.mp4"):
+        run(topic="d", config=cfg, job_id=tmp_path.name, start_from_stage="compose")
+
+    assert not (tmp_path / "narration.json.bak").exists()
 ```
 
 - [ ] **Step 2: Run tests to confirm they fail**
@@ -676,12 +707,13 @@ Replace each stage block with a skip/run branch. Full replacement of the body of
         )
 
     # ── TTS ───────────────────────────────────────────────────────────────────
-    # Create forensic backup before first TTS run (never overwrite)
-    bak_path = job_dir / "narration.json.bak"
-    if not bak_path.exists():
-        shutil.copy2(job_dir / "narration.json", bak_path)
-
     if _should_run("tts", start_from_stage):
+        # Create forensic backup before first TTS run (never overwrite).
+        # Must be inside this block so we only back up the pre-TTS form,
+        # not a post-TTS narration.json when TTS is skipped.
+        bak_path = job_dir / "narration.json.bak"
+        if not bak_path.exists():
+            shutil.copy2(job_dir / "narration.json", bak_path)
         progress("Synthesising audio", 45)
         engine = get_engine(config)
         tts.run(script, job_dir, config, engine)
