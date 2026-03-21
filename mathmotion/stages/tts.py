@@ -3,10 +3,7 @@ import logging
 import subprocess
 import sys
 import traceback
-from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
-
-import filelock
 
 from mathmotion.schemas.script import GeneratedScript, NarrationSegment
 from mathmotion.tts.base import TTSEngine
@@ -34,13 +31,13 @@ def _silence(path: Path, duration: float) -> Path:
 
 
 def run(script: GeneratedScript, job_dir: Path, config, engine: TTSEngine) -> None:
+    print(f"[TTS] run() called. engine={config.tts.engine!r}, engine_obj={engine!r}", flush=True)
     audio_dir = job_dir / "audio" / "segments"
     audio_dir.mkdir(parents=True, exist_ok=True)
 
     match config.tts.engine:
         case "kokoro":    tts_cfg = config.tts.kokoro
         case "vibevoice": tts_cfg = config.tts.vibevoice
-        case "qwen3":     tts_cfg = config.tts.qwen3
         case n:           raise ValueError(f"Unknown TTS engine: {n!r}")
     voice = tts_cfg.voice
     speed = tts_cfg.speed
@@ -51,14 +48,12 @@ def run(script: GeneratedScript, job_dir: Path, config, engine: TTSEngine) -> No
         for seg in scene.narration_segments
     ]
     total_segs = len(segments)
+    print(f"[TTS] scenes={len(script.scenes)}, total_segments={total_segs}, voice={voice!r}, speed={speed}", flush=True)
     logger.info(f"Synthesising {total_segs} audio segment(s) with engine={config.tts.engine!r}")
 
     narration_path = job_dir / "narration.json"
-    # Write initial narration.json if not present
     if not narration_path.exists():
         narration_path.write_text(script.model_dump_json(indent=2))
-
-    lock = filelock.FileLock(str(narration_path) + ".lock")
 
     def synth(scene_id: str, seg: NarrationSegment):
         logger.info(f"Synthesising {seg.id} ({len(seg.text)} chars)…")
@@ -77,20 +72,15 @@ def run(script: GeneratedScript, job_dir: Path, config, engine: TTSEngine) -> No
             duration = fallback_duration
         return scene_id, seg.id, duration, str(mp3)
 
-    done = 0
-    with ThreadPoolExecutor(max_workers=4) as pool:
-        futures = {pool.submit(synth, sid, seg): seg for sid, seg in segments}
-        for future in as_completed(futures):
-            scene_id, seg_id, duration, mp3_path = future.result()
-            done += 1
-            with lock:
-                data = json.loads(narration_path.read_text())
-                for scene in data["scenes"]:
-                    if scene["id"] != scene_id:
-                        continue
-                    for seg in scene["narration_segments"]:
-                        if seg["id"] == seg_id:
-                            seg["actual_duration"] = duration
-                            seg["audio_path"] = mp3_path
-                narration_path.write_text(json.dumps(data, indent=2))
-            logger.info(f"Synthesised {seg_id} ({duration:.2f}s) — {done}/{total_segs} segments done")
+    for done, (sid, seg) in enumerate(segments, 1):
+        scene_id, seg_id, duration, mp3_path = synth(sid, seg)
+        data = json.loads(narration_path.read_text())
+        for scene in data["scenes"]:
+            if scene["id"] != scene_id:
+                continue
+            for s in scene["narration_segments"]:
+                if s["id"] == seg_id:
+                    s["actual_duration"] = duration
+                    s["audio_path"] = mp3_path
+        narration_path.write_text(json.dumps(data, indent=2))
+        logger.info(f"Synthesised {seg_id} ({duration:.2f}s) — {done}/{total_segs} segments done")

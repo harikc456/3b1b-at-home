@@ -31,27 +31,20 @@ class KokoroConfig(BaseModel):
 
 
 class VibevoiceConfig(BaseModel):
+    model_path: str = "microsoft/VibeVoice-1.5b"
     voice: str = "neutral_female"
     speed: float = 1.0
+    cfg_scale: float = 1.3
+    ddpm_inference_steps: int = 10
+    device: str = "cuda"
+    voice_samples: dict[str, str] = {}
     available_voices: list[str] = ["neutral_female"]
 
 
-class Qwen3Config(BaseModel):
-    model_id: str = "Qwen/Qwen3-TTS-12Hz-0.6B-CustomVoice"
-    device: str = "cuda:0"
-    use_flash_attention: bool = False
-    voice: str = "Vivian"
-    speed: float = 1.0          # accepted by interface, ignored in synthesis
-    instruct: str = ""
-    language: str = "English"
-    available_voices: list[str] = ["Vivian"]
-
-
 class TTSConfig(BaseModel):
-    engine: str = "qwen3"       # changed from "kokoro"
+    engine: str = "kokoro"
     kokoro: KokoroConfig
     vibevoice: VibevoiceConfig
-    qwen3: Qwen3Config = Qwen3Config()
 
 
 class ManimConfig(BaseModel):
