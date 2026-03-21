@@ -6,7 +6,7 @@
 
 **Architecture:** Four coordinated changes — (1) job state persistence in `api/routes.py` via an in-memory dict + `job_state.json` on disk; (2) `start_from_stage` parameter in `mathmotion/pipeline.py` with per-stage load-from-disk paths; (3) two new API endpoints (`POST /resume/{job_id}`, `GET /api/jobs`) plus a modified status endpoint; (4) a Past Jobs panel + Resume modal in `static/index.html`.
 
-**Tech Stack:** Python 3.13, FastAPI, Pydantic v2, threading.Lock, pytest, vanilla HTML/JS
+**Tech Stack:** Python 3.13, FastAPI, Pydantic v2, asyncio (asyncio.Lock, asyncio.to_thread, asyncio.create_task), pytest, vanilla HTML/JS
 
 ---
 
@@ -101,19 +101,21 @@ Expected: ImportError or AttributeError (functions don't exist yet).
 
 Add these imports at the top of `api/routes.py`:
 ```python
+import asyncio
 import os
-import threading
 from datetime import datetime, timezone
 ```
 
 Add after the `_jobs` dict definition:
 ```python
-_state_lock = threading.Lock()
+# asyncio.Lock — acquired only from async route handlers (event loop context).
+# _update_job is sync and called from asyncio.to_thread; it relies on
+# Python's GIL for dict safety (one pipeline per job_id at a time).
+_state_lock = asyncio.Lock()
 
 
 def _save_job_state(job_id: str, state: dict, job_dir: Path) -> None:
     """Atomically write job_state.json. Swallows write errors."""
-    # Exclude internal-only keys from the persisted file
     persisted = {k: v for k, v in state.items() if not k.startswith("_")}
     tmp = job_dir / "job_state.json.tmp"
     try:
@@ -124,13 +126,12 @@ def _save_job_state(job_id: str, state: dict, job_dir: Path) -> None:
 
 
 def _update_job(job_id: str, **kwargs) -> None:
-    """Thread-safe job state update + disk persist."""
-    with _state_lock:
-        if job_id not in _jobs:
-            return
-        _jobs[job_id].update(kwargs)
-        job_dir = Path(_jobs[job_id]["_job_dir"])
-        state_copy = dict(_jobs[job_id])  # copy inside lock before releasing
+    """Sync state update + disk persist. Safe to call from asyncio.to_thread context."""
+    if job_id not in _jobs:
+        return
+    _jobs[job_id].update(kwargs)
+    state_copy = dict(_jobs[job_id])
+    job_dir = Path(_jobs[job_id]["_job_dir"])
     _save_job_state(job_id, state_copy, job_dir)
 ```
 
@@ -142,7 +143,7 @@ Replace the current `_jobs[job_id] = {...}` initialization and the direct dict m
 
 ```python
 @router.post("/generate")
-def start_generate(req: GenerateRequest):
+async def start_generate(req: GenerateRequest):
     from mathmotion.utils.config import get_config
     config = get_config()
 
@@ -167,7 +168,7 @@ def start_generate(req: GenerateRequest):
         "created_at": datetime.now(timezone.utc).isoformat(),
         "_job_dir": str(job_dir),  # internal, not persisted
     }
-    with _state_lock:
+    async with _state_lock:
         _jobs[job_id] = initial_state
     _save_job_state(job_id, initial_state, job_dir)
 
@@ -204,7 +205,7 @@ def start_generate(req: GenerateRequest):
             _update_job(job_id, status="failed", error=str(e), step="Failed",
                         failed_at_stage=_current_stage[0])
 
-    threading.Thread(target=_run, daemon=True).start()
+    asyncio.create_task(asyncio.to_thread(_run))
     return {"job_id": job_id}
 ```
 
@@ -1425,7 +1426,7 @@ def resume_job(job_id: str, req: ResumeRequest):
     _preflight_validate(job_dir, req.start_from_stage)
 
     # 5. Under lock: check not running, then update state
-    with _state_lock:
+    async with _state_lock:
         current = _jobs.get(job_id, {})
         if current.get("status") == "running":
             raise HTTPException(409, detail=f"Job {job_id} is already running")
@@ -1443,7 +1444,7 @@ def resume_job(job_id: str, req: ResumeRequest):
         _jobs[job_id] = new_state
     _save_job_state(job_id, new_state, job_dir)
 
-    # 6. Spawn background thread
+    # 6. Run pipeline as background asyncio task (no threading.Thread)
     def _run():
         from mathmotion.utils.config import get_config as _get
         _get.cache_clear()
@@ -1480,9 +1481,11 @@ def resume_job(job_id: str, req: ResumeRequest):
             _update_job(job_id, status="failed", error=str(e), step="Failed",
                         failed_at_stage=_current_stage[0])
 
-    threading.Thread(target=_run, daemon=True).start()
+    asyncio.create_task(asyncio.to_thread(_run))
     return {"job_id": job_id}
 ```
+
+Also add `async` to the `resume_job` route decorator: `async def resume_job(...)`.
 
 Note: `start_generate`'s `_run` closure is updated in Task 1 Step 4 (it uses the same `_current_stage` pattern shown above).
 
@@ -1578,8 +1581,8 @@ Replace the current `get_status`:
 
 ```python
 @router.get("/status/{job_id}")
-def get_status(job_id: str):
-    with _state_lock:
+async def get_status(job_id: str):
+    async with _state_lock:
         if job_id not in _jobs:
             # Lazy load from disk
             from mathmotion.utils.config import get_config
