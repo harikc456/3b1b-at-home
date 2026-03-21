@@ -96,6 +96,23 @@ def test_preflight_fails_missing_mp4_for_compose_start(tmp_path):
     assert "scene_1.mp4" in exc_info.value.detail
 
 
+def test_preflight_passes_for_compose_start_without_durations(tmp_path):
+    """compose-only resume does not require actual_duration on segments."""
+    from api.routes import _preflight_validate
+    job_dir = tmp_path / "job_8"
+    job_dir.mkdir()
+    (job_dir / "outline.json").write_text("{}")
+    (job_dir / "scene_scripts.json").write_text("{}")
+    _write_narration(job_dir, with_durations=False)  # no durations — should still pass
+    (job_dir / "scenes").mkdir()
+    (job_dir / "scenes" / "scene_1.py").write_text("")
+    render_dir = job_dir / "scenes" / "render"
+    render_dir.mkdir()
+    (render_dir / "scene_1.mp4").write_bytes(b"fake")
+    # Should not raise — compose does not need actual_duration
+    _preflight_validate(job_dir, "compose")
+
+
 def test_preflight_passes_for_outline_start(tmp_path):
     from api.routes import _preflight_validate
     job_dir = tmp_path / "job_6"

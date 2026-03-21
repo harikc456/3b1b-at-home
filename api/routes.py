@@ -131,15 +131,17 @@ def _preflight_validate(job_dir: Path, start_from_stage: Optional[str]) -> None:
                     raise HTTPException(422, detail=f"Required file missing: scenes/{scene_id}.py")
 
         elif stage == "tts":
-            # narration.json must have actual_duration on all segments
-            for scene in _load_narration()["scenes"]:
-                for seg in scene["narration_segments"]:
-                    if seg.get("actual_duration") is None:
-                        raise HTTPException(
-                            422,
-                            detail=f"Required: actual_duration missing on segment {seg['id']} "
-                                   f"(narration.json not fully synthesised)"
-                        )
+            # narration.json must have actual_duration on all segments,
+            # UNLESS we're starting from compose (compose doesn't use durations)
+            if start_from_stage != "compose":
+                for scene in _load_narration()["scenes"]:
+                    for seg in scene["narration_segments"]:
+                        if seg.get("actual_duration") is None:
+                            raise HTTPException(
+                                422,
+                                detail=f"Required: actual_duration missing on segment {seg['id']} "
+                                       f"(narration.json not fully synthesised)"
+                            )
 
         elif stage == "render":
             # narration.json + per-scene .mp4 files
@@ -201,10 +203,20 @@ async def start_generate(req: GenerateRequest):
         _current_stage = [None]
 
         try:
-            from mathmotion.pipeline import run as run_pipeline, STAGES as _STAGES
+            from mathmotion.pipeline import run as run_pipeline
+
+            _STAGE_KEYWORDS = {
+                "outline": "generating_outline",
+                "scene_script": "writing_scene_scripts",
+                "scene_code": "generating_scene_code",
+                "tts": "synthesising_audio",
+                "render": "rendering_animation",
+                "compose": "composing_final_video",
+            }
 
             def on_progress(step: str, pct: int):
-                matched = next((s for s in _STAGES if s in step.lower().replace(" ", "_")), None)
+                normalized = step.lower().replace(" ", "_")
+                matched = next((s for s, kw in _STAGE_KEYWORDS.items() if kw in normalized), None)
                 if matched:
                     _current_stage[0] = matched
                 _update_job(job_id, step=step, pct=pct)
@@ -241,6 +253,11 @@ async def resume_job(job_id: str, req: ResumeRequest):
             status_code=422,
             detail=f"Invalid stage '{req.start_from_stage}'. Valid stages: {STAGES}"
         )
+
+    # Validate job_id format to prevent path traversal
+    import re
+    if not re.match(r'^[a-zA-Z0-9_-]+$', job_id):
+        raise HTTPException(status_code=422, detail=f"Invalid job_id format: {job_id}")
 
     # 2. Validate job directory exists
     config = get_config()
@@ -288,11 +305,21 @@ async def resume_job(job_id: str, req: ResumeRequest):
         _current_stage = [None]  # mutable container for tracking active stage
 
         try:
-            from mathmotion.pipeline import run as run_pipeline, STAGES as _STAGES
+            from mathmotion.pipeline import run as run_pipeline
+
+            _STAGE_KEYWORDS = {
+                "outline": "generating_outline",
+                "scene_script": "writing_scene_scripts",
+                "scene_code": "generating_scene_code",
+                "tts": "synthesising_audio",
+                "render": "rendering_animation",
+                "compose": "composing_final_video",
+            }
 
             def on_progress(step: str, pct: int):
                 # Infer current stage from step name for failed_at_stage tracking
-                matched = next((s for s in _STAGES if s in step.lower().replace(" ", "_")), None)
+                normalized = step.lower().replace(" ", "_")
+                matched = next((s for s, kw in _STAGE_KEYWORDS.items() if kw in normalized), None)
                 if matched:
                     _current_stage[0] = matched
                 _update_job(job_id, step=step, pct=pct)
@@ -470,6 +497,7 @@ def get_jobs():
             "error": state.get("error"),
             "created_at": state.get("created_at"),
             "failed_at_stage": state.get("failed_at_stage"),
+            "last_resumed_from_stage": state.get("last_resumed_from_stage"),
         })
 
     entries.sort(
