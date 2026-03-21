@@ -59,19 +59,21 @@ STAGES = ["outline", "scene_script", "scene_code", "tts", "render", "compose"]
 - Returns `True` if `STAGES.index(stage) >= STAGES.index(start_from_stage)`
 - Returns `False` otherwise
 
-**Pre-flight validation** runs in the **route handler**, before the background thread is spawned, so errors are returned synchronously. For each stage that will be skipped (i.e. stage index < `start_from_stage` index), validate:
+**Pre-flight validation** runs in the **route handler**, before the background thread is spawned, so errors are returned synchronously. Validation is **cumulative**: when resuming from stage X, all stages before X are skipped and ALL their required files must exist. The table below lists requirements per skipped stage; the union of all rows for skipped stages must be satisfied.
 
 | Skipped stage | Required files |
 |---|---|
-| `outline` | `outline.json` exists |
-| `scene_script` | `scene_scripts.json` exists |
-| `scene_code` | `narration.json` exists; `scenes/{scene_id}.py` exists for every scene ID in `narration.json` |
-| `tts` | `narration.json` exists with `actual_duration` (not null) on every segment |
-| `render` | `narration.json` exists; `scenes/render/{scene_id}.mp4` exists for every scene ID in `narration.json` |
+| `outline` | `outline.json` |
+| `scene_script` | `scene_scripts.json` |
+| `scene_code` | `narration.json`; `scenes/{scene_id}.py` for every scene ID in `narration.json` |
+| `tts` | `narration.json` with `actual_duration` non-null on every segment |
+| `render` | `narration.json`; `scenes/render/{scene_id}.mp4` for every scene ID in `narration.json` |
 
-Validation for `scene_code`, `tts`, and `render` all require loading `narration.json` to enumerate scene IDs. This is acceptable — `narration.json` is small.
+`compose` as `start_from_stage` skips all prior stages and requires: `outline.json`, `scene_scripts.json`, `narration.json`, `scenes/{scene_id}.py` for all scene IDs, and `scenes/render/{scene_id}.mp4` for all scene IDs. `actual_duration` is **not** required on `narration.json` segments for a compose-only resume — `compose` does not read audio durations directly.
 
-`compose` **can** be passed as `start_from_stage`. Its required pre-existing files are: `narration.json` exists; `scenes/render/{scene_id}.mp4` exists for every scene ID in `narration.json`.
+Validation for `scene_code`, `tts`, and `render` requires loading `narration.json` to enumerate scene IDs. `narration.json` is small; this is acceptable.
+
+**`scene_code` overwrite behavior:** when `scene_code` runs during a resume (i.e. `start_from_stage ∈ {outline, scene_script, scene_code}`), it overwrites `narration.json` with a fresh file. Any existing `narration.json.bak` from a prior TTS run becomes stale. This is intentional — the user is explicitly requesting regeneration from that stage, accepting that subsequent TTS outputs must also be regenerated.
 
 **Load from disk per skipped stage:**
 
@@ -148,7 +150,7 @@ Pre-flight validation (step 4) runs before the state is set to `running`, so no 
 
 **New: `GET /api/jobs`**
 
-Scans jobs directory, reads `job_state.json` from each subdirectory. Skips directories without one. Returns up to **50** entries, sorted descending by `created_at`; ties broken by `job_id` lexicographic descending.
+Scans jobs directory, reads `job_state.json` from each subdirectory. Skips directories without one. Applies the running→failed correction in the response (without writing to disk): any job whose on-disk `status=running` but that has no live entry in `_jobs` is returned with `status=failed`, `error="Server restarted while job was running"`. Returns up to **50** entries, sorted descending by `created_at`; ties broken by `job_id` lexicographic descending.
 
 Response fields per entry: `job_id`, `topic`, `status`, `step`, `pct`, `error`, `created_at`, `failed_at_stage`.
 
