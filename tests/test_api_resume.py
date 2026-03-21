@@ -294,3 +294,53 @@ def test_resume_returns_409_for_running_job(tmp_path):
 
     assert resp.status_code == 409
     _jobs.pop("job_ccc", None)
+
+
+def test_status_loads_from_disk_after_restart(tmp_path):
+    """Status endpoint lazy-loads job_state.json if job not in memory."""
+    from fastapi.testclient import TestClient
+    from app import app
+    from api.routes import _jobs
+    from unittest.mock import patch as p
+
+    job_dir = tmp_path / "job_ddd"
+    job_dir.mkdir()
+    state = _make_job_state("job_ddd", "complete", "2026-01-01T00:00:00+00:00")
+    state["output"] = str(job_dir / "output" / "final.mp4")
+    (job_dir / "job_state.json").write_text(json.dumps(state))
+
+    _jobs.pop("job_ddd", None)  # simulate server restart
+
+    with p("mathmotion.utils.config.get_config") as mock_cfg:
+        mock_cfg.return_value.storage.jobs_dir = str(tmp_path)
+        client = TestClient(app)
+        resp = client.get("/api/status/job_ddd")
+
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["status"] == "complete"
+
+
+def test_status_corrects_stale_running_on_lazy_load(tmp_path):
+    """A stale running job loaded from disk is returned as failed."""
+    from fastapi.testclient import TestClient
+    from app import app
+    from api.routes import _jobs
+    from unittest.mock import patch as p
+
+    job_dir = tmp_path / "job_eee"
+    job_dir.mkdir()
+    state = _make_job_state("job_eee", "running", "2026-01-01T00:00:00+00:00")
+    (job_dir / "job_state.json").write_text(json.dumps(state))
+
+    _jobs.pop("job_eee", None)
+
+    with p("mathmotion.utils.config.get_config") as mock_cfg:
+        mock_cfg.return_value.storage.jobs_dir = str(tmp_path)
+        client = TestClient(app)
+        resp = client.get("/api/status/job_eee")
+
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["status"] == "failed"
+    assert "restarted" in data["error"].lower()

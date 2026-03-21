@@ -394,9 +394,29 @@ def start_generate_from_script(
 
 @router.get("/status/{job_id}")
 async def get_status(job_id: str):
+    async with _state_lock:
+        if job_id not in _jobs:
+            # Lazy load from disk
+            from mathmotion.utils.config import get_config
+            job_dir = Path(get_config().storage.jobs_dir) / job_id
+            state_file = job_dir / "job_state.json"
+            if not state_file.exists():
+                return {"error": "Job not found"}
+            try:
+                loaded = json.loads(state_file.read_text())
+            except Exception:
+                return {"error": "Job not found"}
+            # Apply running→failed correction for orphaned jobs
+            if loaded.get("status") == "running":
+                loaded["status"] = "failed"
+                loaded["error"] = "Server restarted while job was running"
+            loaded["_job_dir"] = str(job_dir)
+            _jobs.setdefault(job_id, loaded)
+
     job = _jobs.get(job_id)
     if not job:
         return {"error": "Job not found"}
+    # Return only public fields (exclude internal _* keys)
     return {k: v for k, v in job.items() if not k.startswith("_")}
 
 
