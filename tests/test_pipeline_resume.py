@@ -225,3 +225,41 @@ def test_narration_bak_not_created_when_tts_skipped(tmp_path):
         run(topic="d", config=cfg, job_id=tmp_path.name, start_from_stage="compose")
 
     assert not (tmp_path / "narration.json.bak").exists()
+
+
+def test_tts_skips_segment_with_existing_duration(tmp_path):
+    """Segments that already have actual_duration are not re-synthesised."""
+    from mathmotion.stages import tts as tts_stage
+    from mathmotion.schemas.script import GeneratedScript
+
+    script = GeneratedScript.model_validate({
+        "title": "T", "topic": "t",
+        "scenes": [{
+            "id": "scene_1", "class_name": "S", "manim_code": "",
+            "narration_segments": [
+                {"id": "seg_done", "text": "done", "cue_offset": 0.0,
+                 "actual_duration": 1.5, "audio_path": "/tmp/done.mp3"},
+                {"id": "seg_todo", "text": "todo", "cue_offset": 1.5,
+                 "actual_duration": None, "audio_path": None},
+            ],
+        }],
+    })
+
+    narration_path = tmp_path / "narration.json"
+    narration_path.write_text(script.model_dump_json(indent=2))
+
+    cfg = MagicMock()
+    cfg.tts.engine = "kokoro"
+    cfg.tts.kokoro.voice = "af_heart"
+    cfg.tts.kokoro.speed = 1.0
+
+    mock_engine = MagicMock()
+    mock_engine.synthesise.return_value = 2.0
+
+    with patch("mathmotion.stages.tts.subprocess.run"):
+        tts_stage.run(script, tmp_path, cfg, mock_engine)
+
+    # Only seg_todo should have been synthesised
+    assert mock_engine.synthesise.call_count == 1
+    call_args = mock_engine.synthesise.call_args
+    assert "todo" in call_args[0][0]  # first positional arg is the text

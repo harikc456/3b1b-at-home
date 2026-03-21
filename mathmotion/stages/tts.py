@@ -72,8 +72,14 @@ def run(script: GeneratedScript, job_dir: Path, config, engine: TTSEngine) -> No
             duration = fallback_duration
         return scene_id, seg.id, duration, str(mp3)
 
-    for done, (sid, seg) in enumerate(segments, 1):
+    done = 0
+    for sid, seg in segments:
+        # Idempotency: skip segments already synthesised in a previous run
+        if seg.actual_duration is not None:
+            logger.info(f"Skipping {seg.id} — already synthesised ({seg.actual_duration:.2f}s)")
+            continue
         scene_id, seg_id, duration, mp3_path = synth(sid, seg)
+        done += 1
         data = json.loads(narration_path.read_text())
         for scene in data["scenes"]:
             if scene["id"] != scene_id:
@@ -83,4 +89,4 @@ def run(script: GeneratedScript, job_dir: Path, config, engine: TTSEngine) -> No
                     s["actual_duration"] = duration
                     s["audio_path"] = mp3_path
         narration_path.write_text(json.dumps(data, indent=2))
-        logger.info(f"Synthesised {seg_id} ({duration:.2f}s) — {done}/{total_segs} segments done")
+        logger.info(f"Synthesised {seg_id} ({duration:.2f}s) — {done} new segments done")
