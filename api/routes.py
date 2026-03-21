@@ -83,6 +83,73 @@ def reset_orphaned_jobs(jobs_base_dir: Optional[Path] = None) -> None:
                 logger.warning(f"Could not reset orphaned job in {job_dir}: {e}")
 
 
+def _preflight_validate(job_dir: Path, start_from_stage: Optional[str]) -> None:
+    """Validate that all files required by skipped stages exist.
+
+    Raises HTTPException(422) with a descriptive message if any are missing.
+    start_from_stage=None or 'outline' means full run — no validation needed.
+    """
+    from fastapi import HTTPException
+
+    from mathmotion.pipeline import STAGES  # lazy import
+
+    if start_from_stage is None or start_from_stage == "outline":
+        return
+
+    start_idx = STAGES.index(start_from_stage)
+    skipped = STAGES[:start_idx]  # stages that will NOT run
+
+    # Load narration.json once if needed (for scene_id enumeration)
+    narration_data = None
+
+    def _load_narration():
+        nonlocal narration_data
+        if narration_data is None:
+            narration_path = job_dir / "narration.json"
+            if not narration_path.exists():
+                raise HTTPException(422, detail="Required file missing: narration.json")
+            narration_data = json.loads(narration_path.read_text())
+        return narration_data
+
+    def _scene_ids():
+        return [s["id"] for s in _load_narration()["scenes"]]
+
+    for stage in skipped:
+        if stage == "outline":
+            if not (job_dir / "outline.json").exists():
+                raise HTTPException(422, detail="Required file missing: outline.json")
+
+        elif stage == "scene_script":
+            if not (job_dir / "scene_scripts.json").exists():
+                raise HTTPException(422, detail="Required file missing: scene_scripts.json")
+
+        elif stage == "scene_code":
+            # narration.json + per-scene .py files
+            for scene_id in _scene_ids():
+                py = job_dir / "scenes" / f"{scene_id}.py"
+                if not py.exists():
+                    raise HTTPException(422, detail=f"Required file missing: scenes/{scene_id}.py")
+
+        elif stage == "tts":
+            # narration.json must have actual_duration on all segments
+            for scene in _load_narration()["scenes"]:
+                for seg in scene["narration_segments"]:
+                    if seg.get("actual_duration") is None:
+                        raise HTTPException(
+                            422,
+                            detail=f"Required: actual_duration missing on segment {seg['id']} "
+                                   f"(narration.json not fully synthesised)"
+                        )
+
+        elif stage == "render":
+            # narration.json + per-scene .mp4 files
+            render_dir = job_dir / "scenes" / "render"
+            for scene_id in _scene_ids():
+                mp4 = render_dir / f"{scene_id}.mp4"
+                if not mp4.exists():
+                    raise HTTPException(422, detail=f"Required file missing: scenes/render/{scene_id}.mp4")
+
+
 class GenerateRequest(BaseModel):
     topic: str
     quality: str = "standard"
