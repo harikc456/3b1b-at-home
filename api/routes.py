@@ -159,6 +159,10 @@ class GenerateRequest(BaseModel):
     llm_provider: Optional[str] = None
 
 
+class ResumeRequest(BaseModel):
+    start_from_stage: str
+
+
 @router.post("/generate")
 async def start_generate(req: GenerateRequest):
     from mathmotion.utils.config import get_config
@@ -215,6 +219,98 @@ async def start_generate(req: GenerateRequest):
                 llm_provider=req.llm_provider,
                 progress_callback=on_progress,
                 job_id=job_id,
+            )
+            _update_job(job_id, status="complete", output=str(output), pct=100, step="Done",
+                        failed_at_stage=None)
+        except Exception as e:
+            _update_job(job_id, status="failed", error=str(e), step="Failed",
+                        failed_at_stage=_current_stage[0])
+
+    asyncio.create_task(asyncio.to_thread(_run))
+    return {"job_id": job_id}
+
+
+@router.post("/resume/{job_id}")
+async def resume_job(job_id: str, req: ResumeRequest):
+    from mathmotion.pipeline import STAGES
+    from mathmotion.utils.config import get_config
+
+    # 1. Validate stage name
+    if req.start_from_stage not in STAGES:
+        raise HTTPException(
+            status_code=422,
+            detail=f"Invalid stage '{req.start_from_stage}'. Valid stages: {STAGES}"
+        )
+
+    # 2. Validate job directory exists
+    config = get_config()
+    job_dir = Path(config.storage.jobs_dir) / job_id
+    if not job_dir.is_dir():
+        raise HTTPException(status_code=404, detail=f"Job not found: {job_id}")
+
+    # 3. Load job_state.json
+    state_file = job_dir / "job_state.json"
+    if not state_file.exists():
+        raise HTTPException(status_code=404, detail=f"job_state.json not found for {job_id}")
+    try:
+        saved_state = json.loads(state_file.read_text())
+    except Exception as e:
+        raise HTTPException(status_code=404, detail=f"Could not read job_state.json: {e}")
+
+    # 4. Under lock: check not running first
+    async with _state_lock:
+        current = _jobs.get(job_id, {})
+        if current.get("status") == "running":
+            raise HTTPException(status_code=409, detail=f"Job {job_id} is already running")
+
+    # 5. Pre-flight validation (before state becomes running — no rollback needed)
+    _preflight_validate(job_dir, req.start_from_stage)
+
+    # 6. Under lock: update state to running
+    async with _state_lock:
+
+        new_state = {
+            **saved_state,
+            "status": "running",
+            "step": "Resuming…",
+            "pct": 0,
+            "error": None,
+            "failed_at_stage": None,
+            "last_resumed_from_stage": req.start_from_stage,
+            "_job_dir": str(job_dir),
+        }
+        _jobs[job_id] = new_state
+    _save_job_state(job_id, new_state, job_dir)
+
+    # 7. Run pipeline as background asyncio task (no threading.Thread)
+    def _run():
+        from mathmotion.utils.config import get_config as _get
+        _get.cache_clear()
+        cfg = _get()
+
+        _current_stage = [None]  # mutable container for tracking active stage
+
+        try:
+            from mathmotion.pipeline import run as run_pipeline, STAGES as _STAGES
+
+            def on_progress(step: str, pct: int):
+                # Infer current stage from step name for failed_at_stage tracking
+                matched = next((s for s in _STAGES if s in step.lower().replace(" ", "_")), None)
+                if matched:
+                    _current_stage[0] = matched
+                _update_job(job_id, step=step, pct=pct)
+
+            output = run_pipeline(
+                topic=saved_state["topic"],
+                config=cfg,
+                quality=saved_state.get("quality"),
+                level=saved_state.get("level", "undergraduate"),
+                voice=saved_state.get("voice"),
+                tts_engine=saved_state.get("tts_engine"),
+                llm_provider=saved_state.get("llm_provider"),
+                progress_callback=on_progress,
+                job_id=job_id,
+                start_from_stage=req.start_from_stage,
             )
             _update_job(job_id, status="complete", output=str(output), pct=100, step="Done",
                         failed_at_stage=None)

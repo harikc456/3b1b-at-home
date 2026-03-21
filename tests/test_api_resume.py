@@ -194,3 +194,97 @@ def test_get_jobs_caps_at_50(tmp_path):
         result = get_jobs()
 
     assert len(result) == 50
+
+
+def _write_job_state(job_dir: Path, status: str = "failed"):
+    state = _make_job_state(job_dir.name, status, "2026-01-01T00:00:00+00:00",
+                            topic="Fourier transforms")
+    (job_dir / "job_state.json").write_text(json.dumps(state))
+    return state
+
+
+def test_resume_returns_job_id(tmp_path):
+    from fastapi.testclient import TestClient
+    from app import app
+    from api.routes import _jobs
+
+    job_dir = tmp_path / "job_aaa"
+    job_dir.mkdir()
+    _write_job_state(job_dir)
+    # Need required files for tts start (skips outline, scene_script, scene_code)
+    (job_dir / "outline.json").write_text("{}")
+    (job_dir / "scene_scripts.json").write_text("{}")
+    _write_narration(job_dir, with_durations=False)
+    (job_dir / "scenes").mkdir()
+    (job_dir / "scenes" / "scene_1.py").write_text("")
+
+    from unittest.mock import patch as p, MagicMock
+    with p("api.routes._get_jobs_base_dir", return_value=tmp_path), \
+         p("mathmotion.pipeline.run") as mock_run, \
+         p("mathmotion.utils.config.get_config") as mock_cfg:
+        mock_cfg.return_value.storage.jobs_dir = str(tmp_path)
+        mock_run.return_value = job_dir / "output" / "final.mp4"
+
+        client = TestClient(app)
+        resp = client.post("/api/resume/job_aaa",
+                           json={"start_from_stage": "tts"})
+
+    assert resp.status_code == 200
+    assert resp.json()["job_id"] == "job_aaa"
+    # Verify pipeline was called with the correct start_from_stage
+    mock_run.assert_called_once()
+    call_kwargs = mock_run.call_args.kwargs
+    assert call_kwargs.get("start_from_stage") == "tts"
+
+
+def test_resume_returns_404_unknown_job(tmp_path):
+    from fastapi.testclient import TestClient
+    from app import app
+    from unittest.mock import patch as p
+
+    with p("mathmotion.utils.config.get_config") as mock_cfg:
+        mock_cfg.return_value.storage.jobs_dir = str(tmp_path)
+        client = TestClient(app)
+        resp = client.post("/api/resume/job_does_not_exist",
+                           json={"start_from_stage": "tts"})
+
+    assert resp.status_code == 404
+
+
+def test_resume_returns_422_invalid_stage(tmp_path):
+    from fastapi.testclient import TestClient
+    from app import app
+    from unittest.mock import patch as p
+
+    job_dir = tmp_path / "job_bbb"
+    job_dir.mkdir()
+    _write_job_state(job_dir)
+
+    with p("mathmotion.utils.config.get_config") as mock_cfg:
+        mock_cfg.return_value.storage.jobs_dir = str(tmp_path)
+        client = TestClient(app)
+        resp = client.post("/api/resume/job_bbb",
+                           json={"start_from_stage": "not_a_real_stage"})
+
+    assert resp.status_code == 422
+
+
+def test_resume_returns_409_for_running_job(tmp_path):
+    from fastapi.testclient import TestClient
+    from app import app
+    from api.routes import _jobs
+    from unittest.mock import patch as p
+
+    job_dir = tmp_path / "job_ccc"
+    job_dir.mkdir()
+    _write_job_state(job_dir, status="running")
+    _jobs["job_ccc"] = {"status": "running", "_job_dir": str(job_dir)}
+
+    with p("mathmotion.utils.config.get_config") as mock_cfg:
+        mock_cfg.return_value.storage.jobs_dir = str(tmp_path)
+        client = TestClient(app)
+        resp = client.post("/api/resume/job_ccc",
+                           json={"start_from_stage": "tts"})
+
+    assert resp.status_code == 409
+    _jobs.pop("job_ccc", None)
