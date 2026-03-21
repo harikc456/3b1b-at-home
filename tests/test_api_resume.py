@@ -109,3 +109,88 @@ def test_preflight_passes_for_none_start(tmp_path):
     job_dir = tmp_path / "job_7"
     job_dir.mkdir()
     _preflight_validate(job_dir, None)  # Should not raise
+
+
+def _make_job_state(job_id: str, status: str, created_at: str, topic: str = "test") -> dict:
+    return {
+        "status": status, "step": "Done", "pct": 100, "output": None,
+        "error": None, "topic": topic, "quality": "standard", "level": "undergraduate",
+        "voice": None, "tts_engine": "kokoro", "llm_provider": "gemini",
+        "last_resumed_from_stage": None, "failed_at_stage": None,
+        "created_at": created_at,
+    }
+
+
+def test_get_jobs_returns_list(tmp_path):
+    from api.routes import get_jobs
+
+    job_dir = tmp_path / "job_aaa"
+    job_dir.mkdir()
+    (job_dir / "job_state.json").write_text(
+        json.dumps(_make_job_state("job_aaa", "complete", "2026-01-02T00:00:00+00:00"))
+    )
+
+    from unittest.mock import patch as p
+    with p("api.routes._get_jobs_base_dir", return_value=tmp_path):
+        result = get_jobs()
+
+    assert len(result) == 1
+    assert result[0]["job_id"] == "job_aaa"
+    assert result[0]["status"] == "complete"
+
+
+def test_get_jobs_applies_running_failed_correction(tmp_path):
+    """Jobs with status=running that have no live _jobs entry are returned as failed."""
+    from api.routes import get_jobs, _jobs
+
+    job_dir = tmp_path / "job_zzz"
+    job_dir.mkdir()
+    (job_dir / "job_state.json").write_text(
+        json.dumps(_make_job_state("job_zzz", "running", "2026-01-01T00:00:00+00:00"))
+    )
+
+    # job_zzz is NOT in _jobs (no live thread)
+    _jobs.pop("job_zzz", None)
+
+    from unittest.mock import patch as p
+    with p("api.routes._get_jobs_base_dir", return_value=tmp_path):
+        result = get_jobs()
+
+    assert result[0]["status"] == "failed"
+    assert "restarted" in result[0]["error"].lower()
+
+
+def test_get_jobs_sorted_by_created_at(tmp_path):
+    from api.routes import get_jobs
+
+    for job_id, ts in [("job_old", "2026-01-01T00:00:00+00:00"),
+                       ("job_new", "2026-03-01T00:00:00+00:00")]:
+        d = tmp_path / job_id
+        d.mkdir()
+        (d / "job_state.json").write_text(
+            json.dumps(_make_job_state(job_id, "complete", ts))
+        )
+
+    from unittest.mock import patch as p
+    with p("api.routes._get_jobs_base_dir", return_value=tmp_path):
+        result = get_jobs()
+
+    assert result[0]["job_id"] == "job_new"
+    assert result[1]["job_id"] == "job_old"
+
+
+def test_get_jobs_caps_at_50(tmp_path):
+    from api.routes import get_jobs
+
+    for i in range(60):
+        d = tmp_path / f"job_{i:03d}"
+        d.mkdir()
+        (d / "job_state.json").write_text(
+            json.dumps(_make_job_state(f"job_{i:03d}", "complete", f"2026-01-{(i%28)+1:02d}T00:00:00+00:00"))
+        )
+
+    from unittest.mock import patch as p
+    with p("api.routes._get_jobs_base_dir", return_value=tmp_path):
+        result = get_jobs()
+
+    assert len(result) == 50

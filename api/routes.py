@@ -319,6 +319,53 @@ def download_video(job_id: str):
     )
 
 
+def _get_jobs_base_dir() -> Path:
+    from mathmotion.utils.config import get_config
+    return Path(get_config().storage.jobs_dir)
+
+
+@router.get("/jobs")
+def get_jobs():
+    jobs_dir = _get_jobs_base_dir()
+    if not jobs_dir.exists():
+        return []
+
+    entries = []
+    for job_dir in jobs_dir.iterdir():
+        if not job_dir.is_dir():
+            continue
+        state_file = job_dir / "job_state.json"
+        if not state_file.exists():
+            continue
+        try:
+            state = json.loads(state_file.read_text())
+        except Exception:
+            continue
+
+        # Apply running→failed correction in response (without writing to disk)
+        if state.get("status") == "running" and job_dir.name not in _jobs:
+            state = dict(state)
+            state["status"] = "failed"
+            state["error"] = "Server restarted while job was running"
+
+        entries.append({
+            "job_id": job_dir.name,
+            "topic": state.get("topic"),
+            "status": state.get("status"),
+            "step": state.get("step"),
+            "pct": state.get("pct"),
+            "error": state.get("error"),
+            "created_at": state.get("created_at"),
+            "failed_at_stage": state.get("failed_at_stage"),
+        })
+
+    entries.sort(
+        key=lambda e: (e.get("created_at") or "", e.get("job_id") or ""),
+        reverse=True,
+    )
+    return entries[:50]
+
+
 @router.get("/config/options")
 def get_options():
     from mathmotion.utils.config import get_config
