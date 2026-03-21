@@ -45,6 +45,44 @@ def _update_job(job_id: str, **kwargs) -> None:
     _save_job_state(job_id, state_copy, job_dir)
 
 
+def reset_orphaned_jobs(jobs_base_dir: Optional[Path] = None) -> None:
+    """Called on startup. Resets running jobs to failed, removes stale .tmp files."""
+    if jobs_base_dir is None:
+        from mathmotion.utils.config import get_config
+        jobs_base_dir = Path(get_config().storage.jobs_dir)
+
+    if not jobs_base_dir.exists():
+        return
+
+    for job_dir in jobs_base_dir.iterdir():
+        if not job_dir.is_dir():
+            continue
+        # Remove stale .tmp files
+        for tmp_file in job_dir.glob("*.tmp"):
+            try:
+                tmp_file.unlink()
+            except Exception as e:
+                logger.warning(f"Could not delete {tmp_file}: {e}")
+        # Reset running jobs
+        state_file = job_dir / "job_state.json"
+        if not state_file.exists():
+            continue
+        try:
+            state = json.loads(state_file.read_text())
+        except Exception:
+            continue
+        if state.get("status") == "running":
+            state["status"] = "failed"
+            state["error"] = "Server restarted while job was running"
+            state["step"] = "Failed"
+            try:
+                tmp = state_file.with_suffix(".json.tmp")
+                tmp.write_text(json.dumps(state, indent=2))
+                os.replace(tmp, state_file)
+            except Exception as e:
+                logger.warning(f"Could not reset orphaned job in {job_dir}: {e}")
+
+
 class GenerateRequest(BaseModel):
     topic: str
     quality: str = "standard"

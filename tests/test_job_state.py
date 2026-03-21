@@ -51,3 +51,59 @@ def test_update_job_merges_fields(tmp_path):
     assert _jobs["job_xyz"]["status"] == "running"  # unchanged
     data = json.loads((tmp_path / "job_state.json").read_text())
     assert data["pct"] == 50
+
+
+def test_reset_orphaned_jobs_resets_running(tmp_path):
+    from api.routes import reset_orphaned_jobs, _jobs
+
+    job_dir = tmp_path / "job_aaa"
+    job_dir.mkdir()
+    state = {
+        "status": "running",
+        "step": "Rendering",
+        "pct": 50,
+        "error": None,
+        "topic": "t",
+        "quality": "standard",
+        "level": "undergraduate",
+        "voice": None,
+        "tts_engine": "kokoro",
+        "llm_provider": "gemini",
+        "last_resumed_from_stage": None,
+        "failed_at_stage": None,
+        "created_at": "2026-01-01T00:00:00+00:00",
+    }
+    (job_dir / "job_state.json").write_text(json.dumps(state))
+
+    reset_orphaned_jobs(jobs_base_dir=tmp_path)
+
+    data = json.loads((job_dir / "job_state.json").read_text())
+    assert data["status"] == "failed"
+    assert "restarted" in data["error"].lower()
+
+
+def test_reset_orphaned_jobs_deletes_tmp_files(tmp_path):
+    from api.routes import reset_orphaned_jobs
+
+    job_dir = tmp_path / "job_bbb"
+    job_dir.mkdir()
+    stale_tmp = job_dir / "job_state.json.tmp"
+    stale_tmp.write_text("{}")
+
+    reset_orphaned_jobs(jobs_base_dir=tmp_path)
+
+    assert not stale_tmp.exists()
+
+
+def test_reset_orphaned_jobs_ignores_complete_jobs(tmp_path):
+    from api.routes import reset_orphaned_jobs
+
+    job_dir = tmp_path / "job_ccc"
+    job_dir.mkdir()
+    state = {"status": "complete", "error": None}
+    (job_dir / "job_state.json").write_text(json.dumps(state))
+
+    reset_orphaned_jobs(jobs_base_dir=tmp_path)
+
+    data = json.loads((job_dir / "job_state.json").read_text())
+    assert data["status"] == "complete"  # unchanged
