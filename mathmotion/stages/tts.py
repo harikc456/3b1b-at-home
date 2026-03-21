@@ -1,8 +1,6 @@
 import json
 import logging
 import subprocess
-import sys
-import traceback
 from pathlib import Path
 
 from mathmotion.schemas.script import GeneratedScript, NarrationSegment
@@ -31,7 +29,6 @@ def _silence(path: Path, duration: float) -> Path:
 
 
 def run(script: GeneratedScript, job_dir: Path, config, engine: TTSEngine) -> None:
-    print(f"[TTS] run() called. engine={config.tts.engine!r}, engine_obj={engine!r}", flush=True)
     audio_dir = job_dir / "audio" / "segments"
     audio_dir.mkdir(parents=True, exist_ok=True)
 
@@ -48,7 +45,7 @@ def run(script: GeneratedScript, job_dir: Path, config, engine: TTSEngine) -> No
         for seg in scene.narration_segments
     ]
     total_segs = len(segments)
-    print(f"[TTS] scenes={len(script.scenes)}, total_segments={total_segs}, voice={voice!r}, speed={speed}", flush=True)
+    logger.debug(f"TTS run: engine={config.tts.engine!r}, scenes={len(script.scenes)}, total_segments={total_segs}, voice={voice!r}, speed={speed}")
     logger.info(f"Synthesising {total_segs} audio segment(s) with engine={config.tts.engine!r}")
 
     narration_path = job_dir / "narration.json"
@@ -65,15 +62,19 @@ def run(script: GeneratedScript, job_dir: Path, config, engine: TTSEngine) -> No
             duration = engine.synthesise(seg.text, out, voice=voice, speed=speed)
             mp3 = _wav_to_mp3(out.with_suffix(".wav"))
         except (TTSError, Exception) as e:
-            print(f"\n[TTS ERROR] {seg.id}: {e}", file=sys.stderr, flush=True)
-            traceback.print_exc(file=sys.stderr)
-            logger.error(f"TTS failed for {seg.id}: {e} — using silence")
+            logger.error(f"TTS failed for {seg.id}: {e} — using silence", exc_info=True)
             mp3 = _silence(out, fallback_duration)
             duration = fallback_duration
         return scene_id, seg.id, duration, str(mp3)
 
-    for done, (sid, seg) in enumerate(segments, 1):
+    done = 0
+    for sid, seg in segments:
+        # Idempotency: skip segments already synthesised in a previous run
+        if seg.actual_duration is not None:
+            logger.info(f"Skipping {seg.id} — already synthesised ({seg.actual_duration:.2f}s)")
+            continue
         scene_id, seg_id, duration, mp3_path = synth(sid, seg)
+        done += 1
         data = json.loads(narration_path.read_text())
         for scene in data["scenes"]:
             if scene["id"] != scene_id:
@@ -83,4 +84,4 @@ def run(script: GeneratedScript, job_dir: Path, config, engine: TTSEngine) -> No
                     s["actual_duration"] = duration
                     s["audio_path"] = mp3_path
         narration_path.write_text(json.dumps(data, indent=2))
-        logger.info(f"Synthesised {seg_id} ({duration:.2f}s) — {done}/{total_segs} segments done")
+        logger.info(f"Synthesised {seg_id} ({duration:.2f}s) — {done} new segments done")

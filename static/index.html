@@ -183,6 +183,154 @@
     .btn-new { background: #1e293b; color: #94a3b8; border: 1px solid #334155; }
     .btn-new:hover { background: #334155; }
 
+    /* Past jobs panel */
+    #jobs-panel {
+      width: 100%;
+      max-width: 700px;
+      margin-top: 1rem;
+    }
+
+    #jobs-toggle {
+      background: none;
+      border: none;
+      color: #6b7280;
+      font-size: 0.82rem;
+      cursor: pointer;
+      padding: 0.3rem 0;
+      text-align: left;
+      width: 100%;
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+      font-weight: 600;
+    }
+
+    #jobs-toggle:hover { color: #c4b5fd; }
+
+    #jobs-list { margin-top: 0.75rem; display: flex; flex-direction: column; gap: 0.5rem; }
+
+    .job-row {
+      background: #1a1a2e;
+      border: 1px solid #2d2d4e;
+      border-radius: 10px;
+      padding: 0.75rem 1rem;
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+    }
+
+    .job-topic {
+      flex: 1;
+      font-size: 0.88rem;
+      color: #e0e0f0;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .badge {
+      font-size: 0.72rem;
+      font-weight: 700;
+      padding: 0.2rem 0.55rem;
+      border-radius: 99px;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      flex-shrink: 0;
+    }
+
+    .badge-complete { background: #064e3b; color: #6ee7b7; }
+    .badge-failed   { background: #450a0a; color: #fca5a5; }
+    .badge-running  { background: #451a03; color: #fdba74; }
+
+    .btn-resume {
+      padding: 0.35rem 0.8rem;
+      background: #4c1d95;
+      color: #ddd6fe;
+      border: none;
+      border-radius: 6px;
+      font-size: 0.8rem;
+      font-weight: 600;
+      cursor: pointer;
+      flex-shrink: 0;
+    }
+
+    .btn-resume:hover { background: #5b21b6; }
+
+    /* Resume modal */
+    #resume-modal-overlay {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,0.7);
+      z-index: 100;
+      align-items: center;
+      justify-content: center;
+    }
+
+    #resume-modal-overlay.open { display: flex; }
+
+    #resume-modal {
+      background: #1a1a2e;
+      border: 1px solid #2d2d4e;
+      border-radius: 14px;
+      padding: 2rem;
+      width: 100%;
+      max-width: 460px;
+      box-shadow: 0 8px 48px rgba(0,0,0,0.6);
+    }
+
+    #resume-modal h2 {
+      font-size: 1.1rem;
+      font-weight: 700;
+      color: #c4b5fd;
+      margin-bottom: 1rem;
+    }
+
+    .resume-meta { font-size: 0.82rem; color: #6b7280; margin-bottom: 1.2rem; }
+    .resume-meta span { color: #e0e0f0; }
+
+    .modal-actions { display: flex; gap: 0.75rem; margin-top: 1.5rem; }
+
+    #btn-resume-submit {
+      flex: 1;
+      padding: 0.75rem;
+      background: linear-gradient(135deg, #7c3aed, #6d28d9);
+      color: #fff;
+      border: none;
+      border-radius: 8px;
+      font-size: 0.95rem;
+      font-weight: 600;
+      cursor: pointer;
+    }
+
+    #btn-resume-submit:hover { opacity: 0.9; }
+
+    #btn-resume-cancel {
+      padding: 0.75rem 1.2rem;
+      background: #1e293b;
+      color: #94a3b8;
+      border: 1px solid #334155;
+      border-radius: 8px;
+      font-size: 0.95rem;
+      cursor: pointer;
+    }
+
+    #btn-resume-cancel:hover { background: #334155; }
+
+    /* Resume button on error in status card */
+    .btn-resume-inline {
+      margin-top: 0.6rem;
+      padding: 0.4rem 0.9rem;
+      background: #4c1d95;
+      color: #ddd6fe;
+      border: none;
+      border-radius: 6px;
+      font-size: 0.82rem;
+      font-weight: 600;
+      cursor: pointer;
+      display: none;
+    }
+
+    .btn-resume-inline:hover { background: #5b21b6; }
   </style>
 </head>
 <body>
@@ -238,12 +386,36 @@
       <div class="progress-fill" id="progress-fill"></div>
     </div>
     <div id="error-msg"></div>
+    <button id="btn-resume-error" class="btn-resume-inline" onclick="openResumeModalForCurrentJob()">↺ Resume from a stage</button>
 
     <div id="video-section">
       <video id="player" controls></video>
       <div class="video-actions">
         <a id="download-btn" class="btn-secondary btn-download" download>⬇ Download MP4</a>
         <button class="btn-secondary btn-new" onclick="resetUI()">+ New Video</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Past Jobs panel -->
+  <div id="jobs-panel">
+    <button id="jobs-toggle" onclick="toggleJobsPanel()">▸ Past Jobs</button>
+    <div id="jobs-list" style="display:none"></div>
+  </div>
+
+  <!-- Resume modal -->
+  <div id="resume-modal-overlay">
+    <div id="resume-modal">
+      <h2>Resume Job</h2>
+      <div class="resume-meta">
+        Job: <span id="modal-job-id">—</span><br/>
+        Topic: <span id="modal-topic">—</span>
+      </div>
+      <label for="modal-stage">Resume from stage</label>
+      <select id="modal-stage"></select>
+      <div class="modal-actions">
+        <button id="btn-resume-submit" onclick="submitResume()">Resume Job</button>
+        <button id="btn-resume-cancel" onclick="closeResumeModal()">Cancel</button>
       </div>
     </div>
   </div>
@@ -335,6 +507,8 @@
         return;
       }
       const { job_id } = genData;
+      currentJobId = job_id;
+      currentJobState = null;
 
       pollTimer = setInterval(() => poll(job_id), 2000);
     });
@@ -346,6 +520,9 @@
         job = await res.json();
       } catch { return; }
 
+      currentJobId = job_id;
+      currentJobState = job;
+
       setProgress(job.step || "Working…", job.pct || 0);
 
       if (job.status === "complete") {
@@ -355,14 +532,18 @@
         document.getElementById("download-btn").href = url;
         document.getElementById("download-btn").download = `mathmotion_${job_id}.mp4`;
         document.getElementById("video-section").style.display = "block";
+        document.getElementById("btn-resume-error").style.display = "none";
         document.getElementById("submit").disabled = false;
+        if (jobsPanelOpen) loadJobs();
       } else if (job.status === "failed") {
         clearInterval(pollTimer);
         const errEl = document.getElementById("error-msg");
         errEl.textContent = "Error: " + (job.error || "Unknown error");
         errEl.style.display = "block";
+        document.getElementById("btn-resume-error").style.display = "inline-block";
         setProgress("Failed", 0);
         document.getElementById("submit").disabled = false;
+        if (jobsPanelOpen) loadJobs();
       }
     }
 
@@ -377,6 +558,119 @@
       document.getElementById("status-card").style.display = "none";
       document.getElementById("submit").disabled = false;
       document.getElementById("topic").focus();
+    }
+
+    const STAGES = ["outline", "scene_script", "scene_code", "tts", "render", "compose"];
+    let resumeJobId = null;
+    let currentJobId = null;
+    let currentJobState = null;
+
+    // ── Jobs panel ────────────────────────────────────────────────────────────
+    let jobsPanelOpen = false;
+
+    function toggleJobsPanel() {
+      jobsPanelOpen = !jobsPanelOpen;
+      document.getElementById("jobs-list").style.display = jobsPanelOpen ? "flex" : "none";
+      document.getElementById("jobs-toggle").textContent =
+        (jobsPanelOpen ? "▾" : "▸") + " Past Jobs";
+      if (jobsPanelOpen) loadJobs();
+    }
+
+    async function loadJobs() {
+      const list = document.getElementById("jobs-list");
+      list.innerHTML = '<div style="color:#6b7280;font-size:0.85rem">Loading…</div>';
+      try {
+        const res = await fetch("/api/jobs");
+        const jobs = await res.json();
+        if (!jobs.length) {
+          list.innerHTML = '<div style="color:#6b7280;font-size:0.85rem">No past jobs.</div>';
+          return;
+        }
+        list.innerHTML = "";
+        jobs.forEach(j => {
+          const row = document.createElement("div");
+          row.className = "job-row";
+          const topic = (j.topic || "Untitled").substring(0, 60);
+          const badgeClass = j.status === "complete" ? "badge-complete"
+                           : j.status === "failed"   ? "badge-failed"
+                           : "badge-running";
+          const badgeLabel = j.status === "running" ? "Interrupted" : j.status;
+          const canResume = j.status === "failed" || j.status === "running";
+          row.innerHTML = `
+            <span class="job-topic" title="${j.topic || ''}">${topic}</span>
+            <span class="badge ${badgeClass}">${badgeLabel}</span>
+            ${canResume ? `<button class="btn-resume" onclick="openResumeModal('${j.job_id}', '${(j.topic||'').replace(/'/g,"\\'")}', '${j.failed_at_stage||j.last_resumed_from_stage||''}')">↺ Resume</button>` : ''}
+          `;
+          list.appendChild(row);
+        });
+      } catch (e) {
+        list.innerHTML = '<div style="color:#f87171;font-size:0.85rem">Failed to load jobs.</div>';
+      }
+    }
+
+    // ── Resume modal ──────────────────────────────────────────────────────────
+    function openResumeModal(jobId, topic, defaultStage) {
+      resumeJobId = jobId;
+      document.getElementById("modal-job-id").textContent = jobId;
+      document.getElementById("modal-topic").textContent = topic || "—";
+
+      const sel = document.getElementById("modal-stage");
+      sel.innerHTML = "";
+      STAGES.forEach(s => {
+        const o = document.createElement("option");
+        o.value = s;
+        o.textContent = s;
+        if (s === defaultStage) o.selected = true;
+        sel.appendChild(o);
+      });
+
+      document.getElementById("resume-modal-overlay").classList.add("open");
+    }
+
+    function openResumeModalForCurrentJob() {
+      if (!currentJobId || !currentJobState) return;
+      const defaultStage = currentJobState.failed_at_stage
+                        || currentJobState.last_resumed_from_stage
+                        || "outline";
+      openResumeModal(currentJobId, currentJobState.topic, defaultStage);
+    }
+
+    function closeResumeModal() {
+      document.getElementById("resume-modal-overlay").classList.remove("open");
+      resumeJobId = null;
+    }
+
+    async function submitResume() {
+      if (!resumeJobId) return;
+      const stage = document.getElementById("modal-stage").value;
+      closeResumeModal();
+
+      document.getElementById("submit").disabled = true;
+      document.getElementById("status-card").style.display = "block";
+      document.getElementById("video-section").style.display = "none";
+      document.getElementById("error-msg").style.display = "none";
+      document.getElementById("btn-resume-error").style.display = "none";
+      setProgress("Resuming…", 0);
+
+      clearInterval(pollTimer);
+
+      const res = await fetch(`/api/resume/${resumeJobId}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ start_from_stage: stage }),
+      });
+      const data = await res.json();
+
+      if (!res.ok) {
+        const errEl = document.getElementById("error-msg");
+        errEl.textContent = "Error: " + (data.detail || data.error || "Unknown error");
+        errEl.style.display = "block";
+        document.getElementById("submit").disabled = false;
+        return;
+      }
+
+      currentJobId = data.job_id;
+      pollTimer = setInterval(() => poll(data.job_id), 2000);
     }
 
     init();
