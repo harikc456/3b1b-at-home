@@ -81,6 +81,7 @@ def run(
     llm_provider: Optional[str] = None,
     progress_callback: Optional[Callable[[str, int], None]] = None,
     script: Optional[GeneratedScript] = None,
+    job_id: Optional[str] = None,
 ) -> Path:
     """Run the full mathmotion pipeline for the given topic.
 
@@ -106,7 +107,8 @@ def run(
         else:
             config.tts.vibevoice.voice = voice
 
-    job_id = f"job_{uuid.uuid4().hex[:8]}"
+    if job_id is None:
+        job_id = f"job_{uuid.uuid4().hex[:8]}"
     job_dir = Path(config.storage.jobs_dir) / job_id
     job_dir.mkdir(parents=True, exist_ok=True)
 

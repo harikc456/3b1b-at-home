@@ -59,6 +59,7 @@ def start_generate(req: GenerateRequest):
                 tts_engine=req.tts_engine,
                 llm_provider=req.llm_provider,
                 progress_callback=on_progress,
+                job_id=job_id,
             )
             _jobs[job_id]["status"] = "complete"
             _jobs[job_id]["output"] = str(output)
@@ -130,6 +131,7 @@ def start_generate_from_script(
                 llm_provider=llm_provider,
                 progress_callback=on_progress,
                 script=script,
+                job_id=job_id,
             )
             _jobs[job_id]["status"] = "complete"
             _jobs[job_id]["output"] = str(output)
@@ -170,10 +172,9 @@ def get_options():
     config = get_config()
     return {
         "llm_providers": list(config.llm.models),
-        "tts_engines": ["kokoro", "vibevoice", "qwen3"],
+        "tts_engines": ["kokoro", "vibevoice"],
         "kokoro_voices": list(config.tts.kokoro.available_voices),
         "vibevoice_voices": list(config.tts.vibevoice.available_voices),
-        "qwen3_voices": list(config.tts.qwen3.available_voices),
         "qualities": ["draft", "standard", "high"],
         "levels": ["high_school", "undergraduate", "graduate"],
         "defaults": {

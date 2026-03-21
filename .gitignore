@@ -13,3 +13,8 @@ wheels/
 jobs/
 .env
 *.lock
+
+# MLflow traces
+traces/
+.claude/mlflow
+mlruns/

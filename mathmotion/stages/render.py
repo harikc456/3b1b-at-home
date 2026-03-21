@@ -125,6 +125,10 @@ def try_render_all(
             stderr = f"Render timed out for {scene.id}"
             logger.warning(f"Render timed out for {scene.id}")
             failures[scene.id] = stderr
+        except FileNotFoundError:
+            msg = "manim executable not found — ensure manim is installed and on PATH"
+            logger.error(msg)
+            raise RenderError(scene.id, msg)
         except RenderError as e:
             logger.warning(f"Render failed for {scene.id}: {e.stderr[:200]}")
             failures[scene.id] = e.stderr

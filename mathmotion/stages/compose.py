@@ -5,6 +5,7 @@ from pathlib import Path
 
 from mathmotion.schemas.script import GeneratedScript
 from mathmotion.utils.errors import CompositionError
+from mathmotion.utils.ffprobe import measure_duration
 
 logger = logging.getLogger(__name__)
 
@@ -19,18 +20,34 @@ def _silence(path: Path, duration: float) -> None:
 def _build_audio_track(script: GeneratedScript, job_dir: Path) -> Path:
     audio_dir = job_dir / "audio"
     audio_dir.mkdir(parents=True, exist_ok=True)
+    render_dir = job_dir / "scenes" / "render"
     parts, current = [], 0.0
+    scene_start = 0.0
 
     for scene in script.scenes:
+        # Measure the actual rendered video duration so we can map per-scene
+        # cue_offsets to global timestamps in the assembled video.
+        scene_video = render_dir / f"{scene.id}.mp4"
+        try:
+            scene_duration = measure_duration(scene_video)
+        except Exception:
+            # Fall back to the sum of narration durations if probe fails.
+            scene_duration = sum(
+                (seg.actual_duration or 0.0) for seg in scene.narration_segments
+            )
+
         for seg in scene.narration_segments:
-            gap = seg.cue_offset - current
+            global_offset = scene_start + seg.cue_offset
+            gap = global_offset - current
             if gap > 0.05:
                 sil = audio_dir / f"sil_{len(parts)}.mp3"
                 _silence(sil, gap)
                 parts.append(str(sil))
             if seg.audio_path:
                 parts.append(seg.audio_path)
-            current = seg.cue_offset + (seg.actual_duration or 0.0)
+            current = global_offset + (seg.actual_duration or 0.0)
+
+        scene_start += scene_duration
 
     concat = audio_dir / "concat.txt"
     concat.write_text("\n".join(f"file '{Path(p).resolve()}'" for p in parts))

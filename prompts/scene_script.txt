@@ -1,9 +1,12 @@
 You are an expert mathematical animator and educator writing scripts for an educational video.
 
-OUTLINE:
+FULL OUTLINE (for context and narrative consistency):
 {outline_json}
 
-Write a complete script for every scene. For each scene produce:
+SCENE TO WRITE:
+{scene_item_json}
+
+Write a complete script for the above scene only. Produce:
 1. Full spoken narration as natural conversational text.
 2. A fully prescriptive animation description specifying exactly what appears on screen.
 

@@ -13,8 +13,10 @@ class KokoroEngine(TTSEngine):
         import soundfile as sf
 
         if self._pipeline is None:
+            print("[Kokoro] Loading KPipeline...", flush=True)
             from kokoro import KPipeline
-            self._pipeline = KPipeline(lang_code=self.cfg.lang_code, repo_id = 'hexgrad/Kokoro-82M')
+            self._pipeline = KPipeline(lang_code=self.cfg.lang_code, repo_id='hexgrad/Kokoro-82M')
+            print("[Kokoro] KPipeline loaded.", flush=True)
         pipeline = self._pipeline
         voice = voice or self.cfg.voice
         try:
