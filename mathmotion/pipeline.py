@@ -80,16 +80,9 @@ def run(
     tts_engine: Optional[str] = None,
     llm_provider: Optional[str] = None,
     progress_callback: Optional[Callable[[str, int], None]] = None,
-    script: Optional[GeneratedScript] = None,
     job_id: Optional[str] = None,
 ) -> Path:
-    """Run the full mathmotion pipeline for the given topic.
-
-    When ``script`` is provided, the outline, scene-script, and scene-code stages
-    are skipped; scene files and ``narration.json`` are written directly from the
-    provided object.  ``provider`` is still constructed because it is needed for
-    the repair loop.
-    """
+    """Run the full mathmotion pipeline for the given topic."""
     def progress(step: str, pct: int) -> None:
         logger.info(f"[{pct}%] {step}")
         if progress_callback:
@@ -115,21 +108,13 @@ def run(
     logger.info(f"Job {job_id} | topic={topic!r} | model={config.llm.model} | "
                 f"tts={config.tts.engine} | quality={config.manim.default_quality}")
 
-    progress("Preparing script" if script is not None else "Generating outline", 10)
+    progress("Generating outline", 10)
     provider = get_provider(config)
-    if script is None:
-        outline_result = outline_stage.run(topic, job_dir, config, provider, level=level)
-        progress("Writing scene scripts", 20)
-        scripts_result = scene_script_stage.run(outline_result, job_dir, config, provider)
-        progress("Generating scene code", 35)
-        script = scene_code_stage.run(scripts_result, outline_result, job_dir, config, provider)
-    else:
-        # Caller is responsible for validating the script (e.g. via mathmotion.utils.validation.validate_script()).
-        # We trust the provided script and write files directly.
-        (job_dir / "scenes").mkdir(parents=True, exist_ok=True)
-        for scene in script.scenes:
-            (job_dir / "scenes" / f"{scene.id}.py").write_text(scene.manim_code)
-        (job_dir / "narration.json").write_text(script.model_dump_json(indent=2))
+    outline_result = outline_stage.run(topic, job_dir, config, provider, level=level)
+    progress("Writing scene scripts", 20)
+    scripts_result = scene_script_stage.run(outline_result, job_dir, config, provider)
+    progress("Generating scene code", 35)
+    script = scene_code_stage.run(scripts_result, outline_result, job_dir, config, provider)
 
     progress("Synthesising audio", 45)
     engine = get_engine(config)
