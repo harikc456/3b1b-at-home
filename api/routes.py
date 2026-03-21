@@ -1,6 +1,9 @@
+import asyncio
 import json
-import threading
+import logging
+import os
 import uuid
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
 
@@ -8,10 +11,38 @@ from fastapi import APIRouter, File, Form, HTTPException, UploadFile
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
 
+logger = logging.getLogger(__name__)
+
 router = APIRouter()
 
 # In-memory job tracker — fine for personal single-user use
 _jobs: dict[str, dict] = {}
+
+# asyncio.Lock — acquired only from async route handlers (event loop context).
+# _update_job is sync and called from asyncio.to_thread; it relies on
+# Python's GIL for dict safety (one pipeline per job_id at a time).
+_state_lock = asyncio.Lock()
+
+
+def _save_job_state(job_id: str, state: dict, job_dir: Path) -> None:
+    """Atomically write job_state.json. Swallows write errors."""
+    persisted = {k: v for k, v in state.items() if not k.startswith("_")}
+    tmp = job_dir / "job_state.json.tmp"
+    try:
+        tmp.write_text(json.dumps(persisted, indent=2))
+        os.replace(tmp, job_dir / "job_state.json")
+    except Exception as e:
+        logger.warning(f"Failed to save job_state.json for {job_id}: {e}")
+
+
+def _update_job(job_id: str, **kwargs) -> None:
+    """Sync state update + disk persist. Safe to call from asyncio.to_thread context."""
+    if job_id not in _jobs:
+        return
+    _jobs[job_id].update(kwargs)
+    state_copy = dict(_jobs[job_id])
+    job_dir = Path(_jobs[job_id]["_job_dir"])
+    _save_job_state(job_id, state_copy, job_dir)
 
 
 class GenerateRequest(BaseModel):
@@ -24,31 +55,50 @@ class GenerateRequest(BaseModel):
 
 
 @router.post("/generate")
-def start_generate(req: GenerateRequest):
+async def start_generate(req: GenerateRequest):
     from mathmotion.utils.config import get_config
     config = get_config()
 
     job_id = f"job_{uuid.uuid4().hex[:8]}"
-    _jobs[job_id] = {
+    job_dir = Path(config.storage.jobs_dir) / job_id
+    job_dir.mkdir(parents=True, exist_ok=True)
+
+    initial_state = {
         "status": "running",
         "step": "Starting…",
         "pct": 0,
         "output": None,
         "error": None,
+        "topic": req.topic,
+        "quality": req.quality,
+        "level": req.level,
+        "voice": req.voice,
+        "tts_engine": req.tts_engine,
+        "llm_provider": req.llm_provider,
+        "last_resumed_from_stage": None,
+        "failed_at_stage": None,
+        "created_at": datetime.now(timezone.utc).isoformat(),
+        "_job_dir": str(job_dir),  # internal, not persisted
     }
+    async with _state_lock:
+        _jobs[job_id] = initial_state
+    _save_job_state(job_id, initial_state, job_dir)
 
     def _run():
-        # get_config uses lru_cache — clear so overrides take effect on a fresh config copy
         from mathmotion.utils.config import get_config as _get
         _get.cache_clear()
         cfg = _get()
 
+        _current_stage = [None]
+
         try:
-            from mathmotion.pipeline import run as run_pipeline
+            from mathmotion.pipeline import run as run_pipeline, STAGES as _STAGES
 
             def on_progress(step: str, pct: int):
-                _jobs[job_id]["step"] = step
-                _jobs[job_id]["pct"] = pct
+                matched = next((s for s in _STAGES if s in step.lower().replace(" ", "_")), None)
+                if matched:
+                    _current_stage[0] = matched
+                _update_job(job_id, step=step, pct=pct)
 
             output = run_pipeline(
                 topic=req.topic,
@@ -61,16 +111,13 @@ def start_generate(req: GenerateRequest):
                 progress_callback=on_progress,
                 job_id=job_id,
             )
-            _jobs[job_id]["status"] = "complete"
-            _jobs[job_id]["output"] = str(output)
-            _jobs[job_id]["pct"] = 100
-            _jobs[job_id]["step"] = "Done"
+            _update_job(job_id, status="complete", output=str(output), pct=100, step="Done",
+                        failed_at_stage=None)
         except Exception as e:
-            _jobs[job_id]["status"] = "failed"
-            _jobs[job_id]["error"] = str(e)
-            _jobs[job_id]["step"] = "Failed"
+            _update_job(job_id, status="failed", error=str(e), step="Failed",
+                        failed_at_stage=_current_stage[0])
 
-    threading.Thread(target=_run, daemon=True).start()
+    asyncio.create_task(asyncio.to_thread(_run))
     return {"job_id": job_id}
 
 
@@ -142,16 +189,17 @@ def start_generate_from_script(
             _jobs[job_id]["error"] = str(e)
             _jobs[job_id]["step"] = "Failed"
 
+    import threading
     threading.Thread(target=_run, daemon=True).start()
     return {"job_id": job_id}
 
 
 @router.get("/status/{job_id}")
-def get_status(job_id: str):
+async def get_status(job_id: str):
     job = _jobs.get(job_id)
     if not job:
         return {"error": "Job not found"}
-    return job
+    return {k: v for k, v in job.items() if not k.startswith("_")}
 
 
 @router.get("/download/{job_id}")
