@@ -278,6 +278,12 @@ def test_resume_returns_409_for_running_job(tmp_path):
     job_dir = tmp_path / "job_ccc"
     job_dir.mkdir()
     _write_job_state(job_dir, status="running")
+    # Set up required files for "tts" start (so preflight passes)
+    (job_dir / "outline.json").write_text("{}")
+    (job_dir / "scene_scripts.json").write_text("{}")
+    _write_narration(job_dir, with_durations=False)
+    (job_dir / "scenes").mkdir()
+    (job_dir / "scenes" / "scene_1.py").write_text("")
     _jobs["job_ccc"] = {"status": "running", "_job_dir": str(job_dir)}
 
     with p("mathmotion.utils.config.get_config") as mock_cfg:

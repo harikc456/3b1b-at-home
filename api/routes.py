@@ -257,17 +257,14 @@ async def resume_job(job_id: str, req: ResumeRequest):
     except Exception as e:
         raise HTTPException(status_code=404, detail=f"Could not read job_state.json: {e}")
 
-    # 4. Under lock: check not running first
+    # 4. Pre-flight validation — BEFORE the lock
+    _preflight_validate(job_dir, req.start_from_stage)
+
+    # 5. Under ONE lock: check not running, then update state
     async with _state_lock:
         current = _jobs.get(job_id, {})
         if current.get("status") == "running":
             raise HTTPException(status_code=409, detail=f"Job {job_id} is already running")
-
-    # 5. Pre-flight validation (before state becomes running — no rollback needed)
-    _preflight_validate(job_dir, req.start_from_stage)
-
-    # 6. Under lock: update state to running
-    async with _state_lock:
 
         new_state = {
             **saved_state,
