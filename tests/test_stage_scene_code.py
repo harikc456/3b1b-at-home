@@ -3,14 +3,14 @@ from unittest.mock import MagicMock
 
 
 MINIMAL_CODE = """\
-from manim import Text, Scene
+from manim import Text, Write
+from mathmotion.voiceover import VoiceoverScene
 
-class Scene_Intro(Scene):
+class Scene_Intro(VoiceoverScene):
     def construct(self):
         t = Text("Hello")
-        self.add(t)
-        # WAIT:seg_1
-        self.wait(1)
+        with self.voiceover("seg_1") as tracker:
+            self.play(Write(t), run_time=tracker.duration)
 """
 
 VALID_SCENE_JSON = json.dumps({
