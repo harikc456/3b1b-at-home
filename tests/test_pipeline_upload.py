@@ -22,7 +22,7 @@ SAMPLE_SCRIPT = GeneratedScript(
             class_name="SceneA",
             manim_code=MINIMAL_SCENE_CODE,
             narration_segments=[
-                NarrationSegment(id="seg_1", text="Hello world", cue_offset=0.0)
+                NarrationSegment(id="seg_1", text="Hello world")
             ],
         )
     ],

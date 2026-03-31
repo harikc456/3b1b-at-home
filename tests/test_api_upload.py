@@ -24,7 +24,7 @@ VALID_SCRIPT = {
             "class_name": "SceneA",
             "manim_code": MINIMAL_SCENE_CODE,
             "narration_segments": [
-                {"id": "seg_1", "text": "Hello world", "cue_offset": 0.0}
+                {"id": "seg_1", "text": "Hello world"}
             ],
         }
     ],
@@ -71,7 +71,7 @@ def test_upload_forbidden_import_returns_error():
                 "class_name": "SceneA",
                 "manim_code": "import os\nfrom manim import *\nclass SceneA(Scene):\n    def construct(self): pass",
                 "narration_segments": [
-                    {"id": "seg_1", "text": "Hello world", "cue_offset": 0.0}
+                    {"id": "seg_1", "text": "Hello world"}
                 ],
             }
         ],
