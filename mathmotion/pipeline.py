@@ -169,45 +169,6 @@ def run(
         engine = get_engine(config)
         tts.run(script, job_dir, config, engine)
 
-    # ── Inject durations ──────────────────────────────────────────────────────
-    # TODO (Task 7): Remove this dead code block and all references to inject_actual_durations
-    progress("Injecting durations into scene code", 60)
-    script = GeneratedScript.model_validate(
-        json.loads((job_dir / "narration.json").read_text())
-    )
-    durations = {
-        seg.id: seg.actual_duration
-        for scene in script.scenes
-        for seg in scene.narration_segments
-        if seg.actual_duration is not None
-    }
-    scenes_dir = job_dir / "scenes"
-    for scene in script.scenes:
-        scene_file = scenes_dir / f"{scene.id}.py"
-        if scene_file.exists():
-            scene_file.write_text(inject_actual_durations(scene_file.read_text(), durations))
-
-    # ── Recalculate cue_offsets from actual Manim animation timings ───────────
-    # TODO (Task 7): Remove this dead code block and all references to compute_cue_offsets
-    # The LLM-supplied cue_offset values are estimates and may not match the
-    # actual elapsed time in the rendered video when each narration wait fires.
-    # Re-derive them by parsing the (now duration-injected) scene code so the
-    # audio track built in the compose stage stays in sync with the video.
-    cue_offsets_changed = False
-    for scene in script.scenes:
-        scene_file = scenes_dir / f"{scene.id}.py"
-        if not scene_file.exists():
-            continue
-        seg_ids = {seg.id for seg in scene.narration_segments}
-        computed = compute_cue_offsets(scene_file.read_text(), seg_ids)
-        for seg in scene.narration_segments:
-            if seg.id in computed and abs(computed[seg.id] - seg.cue_offset) > 0.05:
-                seg.cue_offset = round(computed[seg.id], 3)
-                cue_offsets_changed = True
-    if cue_offsets_changed:
-        (job_dir / "narration.json").write_text(script.model_dump_json(indent=2))
-        logger.info("Recalculated cue_offsets saved to narration.json")
-
     # ── Render ────────────────────────────────────────────────────────────────
     if _should_run("render", start_from_stage):
         progress("Rendering animation", 70)
