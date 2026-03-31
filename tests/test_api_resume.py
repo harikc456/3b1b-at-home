@@ -7,7 +7,7 @@ import pytest
 
 def _write_narration(job_dir: Path, with_durations: bool = True):
     seg = {
-        "id": "seg_1_0", "text": "hi", "cue_offset": 0.0,
+        "id": "seg_1_0", "text": "hi",
         "actual_duration": 2.0 if with_durations else None,
         "audio_path": "/tmp/x.mp3" if with_durations else None,
     }

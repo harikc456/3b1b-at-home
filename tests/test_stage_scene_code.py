@@ -18,7 +18,7 @@ VALID_SCENE_JSON = json.dumps({
     "class_name": "Scene_Intro",
     "manim_code": MINIMAL_CODE,
     "narration_segments": [
-        {"id": "seg_1", "text": "Today we learn about derivatives.", "cue_offset": 0.0}
+        {"id": "seg_1", "text": "Today we learn about derivatives."}
     ],
 })
 
@@ -173,7 +173,7 @@ def test_run_enforces_scene_id_from_input_not_llm(tmp_path):
         "class_name": "Scene_Intro",
         "manim_code": MINIMAL_CODE,
         "narration_segments": [
-            {"id": "seg_1", "text": "Today we learn about derivatives.", "cue_offset": 0.0}
+            {"id": "seg_1", "text": "Today we learn about derivatives."}
         ],
     })
     provider = _make_provider(wrong_id_json)
