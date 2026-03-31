@@ -1,5 +1,4 @@
 import logging
-import re
 import shutil
 import subprocess
 import tempfile
@@ -22,25 +21,6 @@ class Scene_Fallback_{sid}(Scene):
         self.play(Write(Text("{title}", font_size=48)))
         self.wait({dur})
 '''
-
-
-def inject_actual_durations(code: str, durations: dict[str, float]) -> str:
-    """Replace self.wait() values on lines following # WAIT:{seg_id} comments."""
-    lines, out, i = code.split("\n"), [], 0
-    while i < len(lines):
-        m = re.search(r"# WAIT:(\S+)", lines[i])
-        if m and (i + 1) < len(lines) and m.group(1) in durations:
-            out.append(lines[i])
-            out.append(re.sub(
-                r"self\.wait\(.*?\)",
-                f"self.wait({durations[m.group(1)]:.3f})",
-                lines[i + 1],
-            ))
-            i += 2
-        else:
-            out.append(lines[i])
-            i += 1
-    return "\n".join(out)
 
 
 def _render(scene: Scene, scenes_dir: Path, render_dir: Path, quality: str, config) -> Path:
