@@ -85,3 +85,17 @@ def run(script: GeneratedScript, job_dir: Path, config, engine: TTSEngine) -> No
                     s["audio_path"] = mp3_path
         narration_path.write_text(json.dumps(data, indent=2))
         logger.info(f"Synthesised {seg_id} ({duration:.2f}s) — {done} new segments done")
+
+    # Write per-scene voiceover sidecars for VoiceoverScene to consume at render time.
+    scenes_dir = job_dir / "scenes"
+    scenes_dir.mkdir(parents=True, exist_ok=True)
+    data = json.loads(narration_path.read_text())
+    for scene_data in data["scenes"]:
+        sidecar = {
+            seg["id"]: {"audio_path": seg["audio_path"], "duration": seg["actual_duration"]}
+            for seg in scene_data["narration_segments"]
+            if seg.get("audio_path") and seg.get("actual_duration") is not None
+        }
+        sidecar_path = scenes_dir / f"{scene_data['id']}_voiceover.json"
+        sidecar_path.write_text(json.dumps(sidecar, indent=2))
+        logger.info(f"Wrote voiceover sidecar: {sidecar_path.name} ({len(sidecar)} segment(s))")
