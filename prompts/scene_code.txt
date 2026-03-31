@@ -7,16 +7,19 @@ SCENE SCRIPT TO IMPLEMENT:
 {scene_script_json}
 
 RULES:
-1. Respond with a single JSON object only. No markdown fences. No explanation.
-2. Conform exactly to this JSON schema:
+1.  Respond with a single JSON object only. No markdown fences. No explanation.
+2.  Conform exactly to this JSON schema:
 {schema_json}
-3. manim_code must be a complete, self-contained Python file with all imports.
-4. The class name must start with "Scene_" and exactly match the class_name field.
-5. Split the narration into narration_segments at natural pause points.
-6. Every narration-aligned self.wait() must be preceded by: # WAIT:{segment_id}
-7. self.wait() values must always be 1 — replaced with real TTS durations before rendering.
-8. Narration text must be spoken language — no LaTeX, no Unicode math symbols.
-9. Forbidden imports: os, sys, subprocess, socket, urllib, requests, httpx.
-10. Forbidden calls: open(), exec(), eval(), __import__().
-11. Never use `from manim import *` — import only the specific classes you use.
-12. Implement the animation exactly as described in animation_description.
+3.  manim_code must be a complete, self-contained Python file with all imports.
+4.  The class name must start with "Scene_" and exactly match the class_name field.
+5.  Split the narration into narration_segments at natural pause points.
+6.  Import VoiceoverScene at the top of manim_code: from mathmotion.voiceover import VoiceoverScene
+7.  Every scene class must inherit from VoiceoverScene, not Scene.
+8.  For each narration segment use: with self.voiceover("seg_id") as tracker:
+9.  tracker.duration holds the audio duration in seconds — use it to size animations (e.g. run_time=tracker.duration).
+10. Never use # WAIT comments or placeholder self.wait(1) calls for narration timing.
+11. Narration text must be spoken language — no LaTeX, no Unicode math symbols.
+12. Forbidden imports: os, sys, subprocess, socket, urllib, requests, httpx.
+13. Forbidden calls: open(), exec(), eval(), __import__().
+14. Never use `from manim import *` — import only the specific classes you use.
+15. Implement the animation exactly as described in animation_description.
