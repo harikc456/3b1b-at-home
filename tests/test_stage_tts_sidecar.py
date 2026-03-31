@@ -43,7 +43,7 @@ def test_tts_writes_voiceover_sidecar(tmp_path):
 
 
 def test_tts_sidecar_only_includes_synthesised_segments(tmp_path):
-    """Sidecar omits segments with no audio_path (e.g. TTS failed)."""
+    """Sidecar includes pre-existing and newly synthesised segments; both appear after a run."""
     from mathmotion.stages import tts as tts_stage
     from mathmotion.schemas.script import GeneratedScript
 
