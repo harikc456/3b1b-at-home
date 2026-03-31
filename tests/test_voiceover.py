@@ -40,3 +40,9 @@ def test_remaining_wait_returns_zero_within_one_frame():
     # remaining = 0.03 s, one frame at 24fps = 0.0417 s → below threshold
     from mathmotion.voiceover import _remaining_wait
     assert _remaining_wait(duration=1.03, elapsed=1.0, frame_rate=24) == 0.0
+
+
+def test_narration_segment_has_no_cue_offset():
+    from mathmotion.schemas.script import NarrationSegment
+    seg = NarrationSegment(id="seg_1", text="Hello")
+    assert not hasattr(seg, "cue_offset")
