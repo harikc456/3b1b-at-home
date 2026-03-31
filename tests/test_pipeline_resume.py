@@ -22,7 +22,7 @@ MINIMAL_NARRATION = {
         "class_name": "Scene1",
         "manim_code": "class Scene1(Scene): pass",
         "narration_segments": [
-            {"id": "seg_1_0", "text": "Hello", "cue_offset": 0.0,
+            {"id": "seg_1_0", "text": "Hello",
              "actual_duration": 2.0, "audio_path": "/tmp/seg.mp3"},
         ],
     }],
@@ -119,7 +119,7 @@ def test_narration_bak_created_before_tts(tmp_path):
         "title": "Derivatives", "topic": "derivatives",
         "scenes": [{"id": "scene_1", "class_name": "Scene1",
                     "manim_code": "", "narration_segments": [
-                        {"id": "seg_1_0", "text": "Hello", "cue_offset": 0.0}]}],
+                        {"id": "seg_1_0", "text": "Hello"}]}],
     }
     (tmp_path / "narration.json").write_text(json.dumps(narration_no_durations))
     (tmp_path / "scenes").mkdir()
@@ -167,7 +167,7 @@ def test_narration_bak_not_overwritten_on_resume(tmp_path):
     narration_no_durations = {
         "title": "D", "topic": "d",
         "scenes": [{"id": "scene_1", "class_name": "S", "manim_code": "",
-                    "narration_segments": [{"id": "s", "text": "hi", "cue_offset": 0.0}]}],
+                    "narration_segments": [{"id": "s", "text": "hi"}]}],
     }
     (tmp_path / "narration.json").write_text(json.dumps(narration_no_durations))
     (tmp_path / "scenes").mkdir()
@@ -237,9 +237,9 @@ def test_tts_skips_segment_with_existing_duration(tmp_path):
         "scenes": [{
             "id": "scene_1", "class_name": "S", "manim_code": "",
             "narration_segments": [
-                {"id": "seg_done", "text": "done", "cue_offset": 0.0,
+                {"id": "seg_done", "text": "done",
                  "actual_duration": 1.5, "audio_path": "/tmp/done.mp3"},
-                {"id": "seg_todo", "text": "todo", "cue_offset": 1.5,
+                {"id": "seg_todo", "text": "todo",
                  "actual_duration": None, "audio_path": None},
             ],
         }],
