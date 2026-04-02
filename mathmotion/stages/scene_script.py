@@ -17,12 +17,17 @@ def _generate_scene_script(
     prompt_template: str,
 ) -> SceneScript:
     """Generate a script for one scene. Returns SceneScript or raises LLMError."""
-    schema_json = json.dumps(SceneScript.model_json_schema(), indent=2)
+    # Context reduction: only include basic outline info to reduce prompt size/latency
+    outline_context = {
+        "title": outline.title,
+        "topic": outline.topic,
+        "scenes": [{"id": s.id, "title": s.title} for s in outline.scenes]
+    }
+
     system_prompt = (
         prompt_template
-        .replace("{outline_json}", outline.model_dump_json(indent=2))
+        .replace("{outline_json}", json.dumps(outline_context, indent=2))
         .replace("{scene_item_json}", scene_item.model_dump_json(indent=2))
-        .replace("{schema_json}", schema_json)
     )
 
     base_prompt = f"Write the script for scene: {scene_item.id} — {scene_item.title}"
@@ -41,7 +46,6 @@ def _generate_scene_script(
             resp = provider.complete(
                 system_prompt, user_prompt,
                 config.llm.max_tokens, config.llm.temperature,
-                response_schema=SceneScript.model_json_schema(),
             )
         except LLMError as e:
             last_error = str(e)
@@ -79,10 +83,27 @@ def run(
     provider: LLMProvider,
 ) -> AllSceneScripts:
     prompt_template = Path("prompts/scene_script.txt").read_text()
+    
+    # Idempotency: load existing scripts if they exist
+    scripts_file = job_dir / "scene_scripts.json"
+    existing_scripts = {}
+    if scripts_file.exists():
+        try:
+            data = json.loads(scripts_file.read_text())
+            existing_scripts = {s["id"]: SceneScript.model_validate(s) for s in data.get("scenes", [])}
+            logger.info(f"Loaded {len(existing_scripts)} existing scene script(s) from disk")
+        except Exception:
+            logger.warning("Failed to load existing scene scripts, re-generating all")
+
     generated: list[SceneScript] = []
     failures: list[str] = []
 
     for scene_item in outline.scenes:
+        if scene_item.id in existing_scripts:
+            generated.append(existing_scripts[scene_item.id])
+            logger.info(f"Using cached script for scene: {scene_item.id}")
+            continue
+            
         try:
             script = _generate_scene_script(scene_item, outline, config, provider, prompt_template)
             generated.append(script)
@@ -101,6 +122,6 @@ def run(
         topic=outline.topic,
         scenes=generated,
     )
-    (job_dir / "scene_scripts.json").write_text(scripts.model_dump_json(indent=2))
+    scripts_file.write_text(scripts.model_dump_json(indent=2))
     logger.info(f"Scene scripts: {len(generated)} scene(s)")
     return scripts

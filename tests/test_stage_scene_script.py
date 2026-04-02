@@ -2,21 +2,16 @@ import json
 from unittest.mock import MagicMock
 
 
-VALID_SCRIPTS_JSON = json.dumps({
-    "title": "Understanding Derivatives",
-    "topic": "derivatives",
-    "scenes": [
-        {
-            "id": "scene_1",
-            "title": "Introduction",
-            "narration": "Today we learn about derivatives.",
-            "animation_description": {
-                "objects": [{"id": "title", "type": "Text", "color": "WHITE", "initial_position": "CENTER"}],
-                "sequence": [{"action": "FadeIn", "target": "title", "timing": "start", "parameters": {}}],
-                "notes": "",
-            },
-        }
-    ],
+# LLM returns a single SceneScript JSON per scene (not AllSceneScripts)
+VALID_SCENE_SCRIPT_JSON = json.dumps({
+    "id": "scene_1",
+    "title": "Introduction",
+    "narration": "Today we learn about derivatives.",
+    "animation_description": {
+        "objects": [{"id": "title", "type": "Text", "color": "WHITE", "initial_position": "CENTER"}],
+        "sequence": [{"action": "FadeIn", "target": "title", "timing": "start", "parameters": {}}],
+        "notes": "",
+    },
 })
 
 
@@ -50,7 +45,7 @@ def test_run_returns_all_scene_scripts(tmp_path):
     from mathmotion.stages.scene_script import run
     from mathmotion.schemas.script import AllSceneScripts
 
-    provider = _make_provider(VALID_SCRIPTS_JSON)
+    provider = _make_provider(VALID_SCENE_SCRIPT_JSON)
     cfg = _make_config()
     outline = _make_outline()
 
@@ -64,7 +59,7 @@ def test_run_returns_all_scene_scripts(tmp_path):
 def test_run_persists_scene_scripts_json(tmp_path):
     from mathmotion.stages.scene_script import run
 
-    provider = _make_provider(VALID_SCRIPTS_JSON)
+    provider = _make_provider(VALID_SCENE_SCRIPT_JSON)
     cfg = _make_config()
     outline = _make_outline()
 
@@ -79,7 +74,7 @@ def test_run_persists_scene_scripts_json(tmp_path):
 def test_run_passes_outline_json_in_prompt(tmp_path):
     from mathmotion.stages.scene_script import run
 
-    provider = _make_provider(VALID_SCRIPTS_JSON)
+    provider = _make_provider(VALID_SCENE_SCRIPT_JSON)
     cfg = _make_config()
     outline = _make_outline()
 
@@ -90,18 +85,17 @@ def test_run_passes_outline_json_in_prompt(tmp_path):
     assert "Understanding Derivatives" in system_prompt
 
 
-def test_run_passes_schema_to_provider(tmp_path):
+def test_run_does_not_pass_response_schema_to_provider(tmp_path):
     from mathmotion.stages.scene_script import run
-    from mathmotion.schemas.script import AllSceneScripts
 
-    provider = _make_provider(VALID_SCRIPTS_JSON)
+    provider = _make_provider(VALID_SCENE_SCRIPT_JSON)
     cfg = _make_config()
     outline = _make_outline()
 
     run(outline, tmp_path, cfg, provider)
 
     call_kwargs = provider.complete.call_args.kwargs
-    assert call_kwargs["response_schema"] == AllSceneScripts.model_json_schema()
+    assert "response_schema" not in call_kwargs
 
 
 def test_run_raises_llm_error_after_max_retries(tmp_path):
@@ -124,24 +118,18 @@ def test_run_retries_on_empty_narration(tmp_path):
     from mathmotion.stages.scene_script import run
 
     empty_narration_json = json.dumps({
-        "title": "Understanding Derivatives",
-        "topic": "derivatives",
-        "scenes": [
-            {
-                "id": "scene_1",
-                "title": "Introduction",
-                "narration": "   ",  # whitespace only — should fail validation
-                "animation_description": {
-                    "objects": [],
-                    "sequence": [],
-                    "notes": "",
-                },
-            }
-        ],
+        "id": "scene_1",
+        "title": "Introduction",
+        "narration": "   ",  # whitespace only — should fail validation
+        "animation_description": {
+            "objects": [],
+            "sequence": [],
+            "notes": "",
+        },
     })
 
     good_resp = MagicMock()
-    good_resp.content = VALID_SCRIPTS_JSON
+    good_resp.content = VALID_SCENE_SCRIPT_JSON
     bad_resp = MagicMock()
     bad_resp.content = empty_narration_json
 
