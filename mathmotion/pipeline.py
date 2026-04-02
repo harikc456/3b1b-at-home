@@ -10,7 +10,6 @@ from mathmotion.stages import outline as outline_stage
 from mathmotion.stages import scene_script as scene_script_stage
 from mathmotion.stages import scene_code as scene_code_stage
 from mathmotion.stages import render, repair, tts, compose
-from mathmotion.stages.render import inject_actual_durations
 from mathmotion.tts.factory import get_engine
 from mathmotion.utils.config import Config
 
@@ -51,7 +50,22 @@ def _run_render_repair_loop(
         if not remaining:
             break
 
-        successes, failures = try_render_all(remaining, scenes_dir, render_dir, quality, config)
+        # Find the path of the scene immediately before the first one in 'remaining'
+        initial_prev_path = None
+        if remaining:
+            first_idx = next((i for i, s in enumerate(script.scenes) if s.id == remaining[0].id), 0)
+            if first_idx > 0:
+                prev_id = script.scenes[first_idx - 1].id
+                initial_prev_path = results.get(prev_id)
+
+        successes, failures = try_render_all(
+            remaining, 
+            scenes_dir, 
+            render_dir, 
+            quality, 
+            config,
+            initial_prev_path=initial_prev_path
+        )
         results.update(successes)
         remaining = [scene_map[sid] for sid in failures]
 
@@ -169,23 +183,6 @@ def run(
         progress("Synthesising audio", 45)
         engine = get_engine(config)
         tts.run(script, job_dir, config, engine)
-
-    # ── Inject durations ──────────────────────────────────────────────────────
-    progress("Injecting durations into scene code", 60)
-    script = GeneratedScript.model_validate(
-        json.loads((job_dir / "narration.json").read_text())
-    )
-    durations = {
-        seg.id: seg.actual_duration
-        for scene in script.scenes
-        for seg in scene.narration_segments
-        if seg.actual_duration is not None
-    }
-    scenes_dir = job_dir / "scenes"
-    for scene in script.scenes:
-        scene_file = scenes_dir / f"{scene.id}.py"
-        if scene_file.exists():
-            scene_file.write_text(inject_actual_durations(scene_file.read_text(), durations))
 
     # ── Render ────────────────────────────────────────────────────────────────
     if _should_run("render", start_from_stage):
