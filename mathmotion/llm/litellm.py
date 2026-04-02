@@ -27,18 +27,25 @@ class LiteLLMProvider(LLMProvider):
             timeout=self.cfg.timeout_seconds,
         )
         if json_mode:
+            # Ensure "JSON" is mentioned in the system prompt for models that only support json_object
+            if "json" not in system_prompt.lower():
+                system_prompt += "\n\nCRITICAL: You MUST respond with a single, valid JSON object only. Do not include markdown fences or any other text."
+
             schema_supported = bool(response_schema and supports_response_schema(model=self.cfg.model))
             if schema_supported:
-                logger.debug(f"Using json_schema response_format for {self.cfg.model}")
+                logger.debug(f"Using json_schema (strict) response_format for {self.cfg.model}")
                 kwargs["response_format"] = {
                     "type": "json_schema",
-                    "json_schema": {"name": "response", "schema": response_schema, "strict": True},
+                    "json_schema": {
+                        "name": "structured_response", 
+                        "schema": response_schema, 
+                        "strict": True
+                    },
                 }
             else:
                 logger.debug(
                     f"Using json_object response_format for {self.cfg.model} "
-                    f"(response_schema={'passed' if response_schema else 'not passed'}, "
-                    f"supports_response_schema={supports_response_schema(model=self.cfg.model)})"
+                    f"(response_schema={'passed' if response_schema else 'not passed'})"
                 )
                 kwargs["response_format"] = {"type": "json_object"}
         try:

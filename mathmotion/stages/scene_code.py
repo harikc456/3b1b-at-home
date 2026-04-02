@@ -1,6 +1,7 @@
 import json
 import logging
 import re
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 
 from mathmotion.llm.base import LLMProvider
@@ -46,8 +47,8 @@ def _generate_scene(
     config,
     provider: LLMProvider,
     prompt_template: str,
-) -> Scene:
-    """Generate Manim code for one scene. Returns Scene or raises LLMError."""
+) -> tuple[Scene, list[dict]]:
+    """Generate Manim code for one scene. Returns (Scene, error_records) or raises LLMError."""
     outline_context = {
         "title": outline.title,
         "topic": outline.topic,
@@ -63,6 +64,7 @@ def _generate_scene(
     base_prompt = f"Implement Manim code for scene: {scene_script.id}"
     user_prompt = base_prompt
     last_error = None
+    error_records: list[dict] = []
 
     for attempt in range(config.llm.max_retries + 1):
         if attempt > 0:
@@ -72,29 +74,34 @@ def _generate_scene(
             )
             user_prompt = f"{base_prompt}\n\nPrevious attempt failed — fix this: {last_error}"
 
+        raw_response = None
         try:
             resp = provider.complete(
                 system_prompt, user_prompt,
                 config.llm.max_tokens, config.llm.temperature,
                 json_mode=False,
             )
+            raw_response = resp.content
         except LLMError as e:
             last_error = str(e)
+            error_records.append({"scene_id": scene_script.id, "attempt": attempt, "error": last_error, "raw_response": None})
             continue
 
         try:
-            scene = _parse_code_to_scene(scene_script.id, resp.content)
+            scene = _parse_code_to_scene(scene_script.id, raw_response)
         except Exception as e:
             last_error = f"Parse error: {e}"
+            error_records.append({"scene_id": scene_script.id, "attempt": attempt, "error": last_error, "raw_response": raw_response})
             continue
 
         try:
             validate_scene_item(scene)
         except ValidationError as e:
             last_error = str(e)
+            error_records.append({"scene_id": scene_script.id, "attempt": attempt, "error": last_error, "raw_response": raw_response})
             continue
 
-        return scene
+        return scene, error_records
 
     raise LLMError(
         f"Code generation failed for {scene_script.id} after "
@@ -122,22 +129,38 @@ def run(
         except Exception:
             logger.warning("Failed to load existing narration, re-generating all")
 
-    generated: list[Scene] = []
+    generated_map: dict[str, Scene] = dict(existing_scenes)
     failures: list[str] = []
+    all_errors: list[dict] = []
 
-    for scene_script in scripts.scenes:
-        if scene_script.id in existing_scenes:
-            generated.append(existing_scenes[scene_script.id])
-            logger.info(f"Using cached code for scene: {scene_script.id}")
-            continue
+    pending = [s for s in scripts.scenes if s.id not in existing_scenes]
+    workers = min(config.llm.max_parallel_scenes, len(pending)) if pending else 1
 
-        try:
-            scene = _generate_scene(scene_script, outline, config, provider, prompt_template)
-            generated.append(scene)
-            logger.info(f"Generated code for scene: {scene_script.id}")
-        except LLMError as e:
-            logger.error(f"Failed to generate code for {scene_script.id}: {e}")
-            failures.append(scene_script.id)
+    with ThreadPoolExecutor(max_workers=workers) as pool:
+        futures = {
+            pool.submit(_generate_scene, s, outline, config, provider, prompt_template): s
+            for s in pending
+        }
+        for future in as_completed(futures):
+            scene_script = futures[future]
+            try:
+                scene, error_records = future.result()
+                generated_map[scene_script.id] = scene
+                all_errors.extend(error_records)
+                logger.info(f"Generated code for scene: {scene_script.id}")
+            except LLMError as e:
+                logger.error(f"Failed to generate code for {scene_script.id}: {e}")
+                failures.append(scene_script.id)
+
+    if all_errors:
+        errors_file = job_dir / "scene_code_errors.jsonl"
+        with errors_file.open("a") as f:
+            for record in all_errors:
+                f.write(json.dumps(record) + "\n")
+        logger.info(f"Wrote {len(all_errors)} error record(s) to {errors_file.name}")
+
+    # Preserve original scene order
+    generated = [generated_map[s.id] for s in scripts.scenes if s.id in generated_map]
 
     if failures:
         raise LLMError(

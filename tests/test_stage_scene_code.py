@@ -76,6 +76,7 @@ def _make_config(max_retries: int = 1) -> MagicMock:
     cfg.llm.max_tokens = 4096
     cfg.llm.temperature = 0.2
     cfg.llm.model = "gemini-2.0-flash"
+    cfg.llm.max_parallel_scenes = 4
     return cfg
 
 
@@ -198,6 +199,31 @@ def test_run_retries_on_parse_error(tmp_path):
 
     assert isinstance(result, GeneratedScript)
     assert provider.complete.call_count == 2
+
+
+def test_run_writes_error_log_on_retry(tmp_path):
+    """Failed attempts are written to scene_code_errors.jsonl."""
+    import json as _json
+    from mathmotion.stages.scene_code import run
+
+    bad_resp = MagicMock()
+    bad_resp.content = "no Scene_ class"
+    good_resp = MagicMock()
+    good_resp.content = MINIMAL_VOICEOVER_CODE
+
+    provider = MagicMock()
+    provider.complete.side_effect = [bad_resp, good_resp]
+
+    run(_make_scripts(), _make_outline(), tmp_path, _make_config(max_retries=1), provider)
+
+    errors_file = tmp_path / "scene_code_errors.jsonl"
+    assert errors_file.exists()
+    records = [_json.loads(line) for line in errors_file.read_text().splitlines()]
+    assert len(records) == 1
+    assert records[0]["scene_id"] == "scene_1"
+    assert records[0]["attempt"] == 0
+    assert "Parse error" in records[0]["error"]
+    assert records[0]["raw_response"] == "no Scene_ class"
 
 
 def test_run_scene_id_comes_from_input_not_llm(tmp_path):

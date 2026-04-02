@@ -68,15 +68,32 @@ def _run_render_repair_loop(
                 f"Repair attempt {attempt + 1}/{config.llm.repair_max_retries}: "
                 f"{len(remaining)} scene(s) need fixing"
             )
-            for scene in remaining:
-                try:
-                    repair.fix_scene(
-                        scenes_dir / f"{scene.id}.py",
-                        failures[scene.id],
-                        provider,
-                    )
-                except Exception as e:
-                    logger.warning(f"LLM repair failed for {scene.id}: {e} — will retry as-is")
+            from concurrent.futures import ThreadPoolExecutor, as_completed as futures_done
+
+            # Snapshot broken code + render error before repair overwrites the file
+            render_errors_file = job_dir / "render_errors.jsonl"
+            with render_errors_file.open("a") as ef:
+                for scene in remaining:
+                    scene_path = scenes_dir / f"{scene.id}.py"
+                    record = {
+                        "scene_id": scene.id,
+                        "repair_attempt": attempt + 1,
+                        "render_error": failures[scene.id],
+                        "broken_code": scene_path.read_text(),
+                    }
+                    ef.write(json.dumps(record) + "\n")
+
+            def _repair(scene):
+                repair.fix_scene(scenes_dir / f"{scene.id}.py", failures[scene.id], provider)
+
+            workers = min(config.llm.max_parallel_scenes, len(remaining))
+            with ThreadPoolExecutor(max_workers=workers) as pool:
+                repair_futures = {pool.submit(_repair, scene): scene for scene in remaining}
+                for future in futures_done(repair_futures):
+                    scene = repair_futures[future]
+                    exc = future.exception()
+                    if exc:
+                        logger.warning(f"LLM repair failed for {scene.id}: {exc} — will retry as-is")
 
     for scene in remaining:
         logger.error(f"Scene {scene.id} exhausted repair attempts — using fallback title card")

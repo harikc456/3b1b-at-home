@@ -5,7 +5,6 @@ from pydantic import BaseModel
 class NarrationSegment(BaseModel):
     id: str
     text: str
-    cue_offset: float
     actual_duration: Optional[float] = None
     audio_path: Optional[str] = None
 

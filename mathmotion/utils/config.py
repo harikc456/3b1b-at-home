@@ -19,7 +19,8 @@ class LLMConfig(BaseModel):
     temperature: float = 0.2
     max_retries: int = 3
     repair_max_retries: int = 3
-    timeout_seconds: int = 120
+    timeout_seconds: int = 300
+    max_parallel_scenes: int = 4
 
 
 class KokoroConfig(BaseModel):

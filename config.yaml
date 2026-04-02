@@ -16,6 +16,7 @@ llm:
   max_retries: 3
   repair_max_retries: 3
   timeout_seconds: 300
+  max_parallel_scenes: 4
 
 tts:
   engine: kokoro                # kokoro | vibevoice
