@@ -74,3 +74,98 @@ def test_compose_no_extension_when_video_longer(tmp_path):
             pass
 
     mock_freeze.assert_not_called()
+
+
+import json
+import os
+from pathlib import Path
+
+
+def test_render_passes_durations_file_to_subprocess(tmp_path):
+    """_render must write a durations JSON and pass MATHMOTION_DURATIONS_FILE env var."""
+    from mathmotion.schemas.script import Scene, NarrationSegment
+    from mathmotion.stages.render import _render
+
+    scene = Scene(
+        id="scene_1",
+        class_name="Scene_Test",
+        manim_code="from manim import *\nfrom mathmotion.manim_ext import MathMotionScene\nclass Scene_Test(MathMotionScene): pass",
+        narration_segments=[
+            NarrationSegment(id="seg_0", text="hello world", actual_duration=2.5),
+            NarrationSegment(id="seg_1", text="goodbye world", actual_duration=1.3),
+        ],
+    )
+
+    render_dir = tmp_path / "render"
+    render_dir.mkdir()
+
+    captured = {}
+
+    def fake_subprocess_run(cmd, **kwargs):
+        env = kwargs.get("env", {})
+        dur_path = env.get("MATHMOTION_DURATIONS_FILE", "")
+        if dur_path and Path(dur_path).exists():
+            captured["durations"] = json.loads(Path(dur_path).read_text())
+        result = MagicMock()
+        result.returncode = 0
+        result.stdout = ""
+        result.stderr = ""
+        return result
+
+    cfg = MagicMock()
+    cfg.manim.background_color = "BLACK"
+    cfg.manim.timeout_seconds = 60
+
+    with patch("mathmotion.stages.render.subprocess.run", side_effect=fake_subprocess_run):
+        try:
+            _render(scene, tmp_path, render_dir, "draft", cfg)
+        except Exception:
+            pass  # No mp4 produced → RenderError is expected; we only check env
+
+    assert "durations" in captured, "MATHMOTION_DURATIONS_FILE was not set or file was missing"
+    assert captured["durations"] == [2.5, 1.3]
+
+
+def test_render_uses_word_count_for_missing_actual_duration(tmp_path):
+    """Segments without actual_duration use word-count fallback in durations file."""
+    from mathmotion.schemas.script import Scene, NarrationSegment
+    from mathmotion.stages.render import _render
+
+    scene = Scene(
+        id="scene_1",
+        class_name="Scene_Test",
+        manim_code="from manim import *\nfrom mathmotion.manim_ext import MathMotionScene\nclass Scene_Test(MathMotionScene): pass",
+        narration_segments=[
+            NarrationSegment(id="seg_0", text="one two three four five", actual_duration=None),
+        ],
+    )
+
+    render_dir = tmp_path / "render"
+    render_dir.mkdir()
+
+    captured = {}
+
+    def fake_subprocess_run(cmd, **kwargs):
+        env = kwargs.get("env", {})
+        dur_path = env.get("MATHMOTION_DURATIONS_FILE", "")
+        if dur_path and Path(dur_path).exists():
+            captured["durations"] = json.loads(Path(dur_path).read_text())
+        result = MagicMock()
+        result.returncode = 0
+        result.stdout = ""
+        result.stderr = ""
+        return result
+
+    cfg = MagicMock()
+    cfg.manim.background_color = "BLACK"
+    cfg.manim.timeout_seconds = 60
+
+    with patch("mathmotion.stages.render.subprocess.run", side_effect=fake_subprocess_run):
+        try:
+            _render(scene, tmp_path, render_dir, "draft", cfg)
+        except Exception:
+            pass
+
+    assert "durations" in captured
+    # 5 words / 2.5 = 2.0, floor at 1.0
+    assert abs(captured["durations"][0] - 2.0) < 0.01
