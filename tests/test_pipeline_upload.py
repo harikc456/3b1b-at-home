@@ -22,7 +22,7 @@ SAMPLE_SCRIPT = GeneratedScript(
             class_name="SceneA",
             manim_code=MINIMAL_SCENE_CODE,
             narration_segments=[
-                NarrationSegment(id="seg_1", text="Hello world", cue_offset=0.0)
+                NarrationSegment(id="seg_1", text="Hello world")
             ],
         )
     ],
@@ -42,7 +42,6 @@ def test_pipeline_skips_generate_when_script_provided(tmp_path):
         patch("mathmotion.pipeline.get_provider") as mock_provider,
         patch("mathmotion.pipeline.get_engine"),
         patch("mathmotion.pipeline.tts.run"),
-        patch("mathmotion.pipeline.inject_actual_durations", side_effect=lambda text, _: text),
         patch("mathmotion.pipeline._run_render_repair_loop", return_value={}),
         patch("mathmotion.pipeline.compose.run", return_value=tmp_path / "out.mp4"),
         patch("mathmotion.pipeline.outline_stage.run") as mock_outline,
@@ -82,7 +81,6 @@ def test_pipeline_writes_files_when_script_provided(tmp_path):
         patch("mathmotion.pipeline.get_provider"),
         patch("mathmotion.pipeline.get_engine"),
         patch("mathmotion.pipeline.tts.run", side_effect=fake_tts),
-        patch("mathmotion.pipeline.inject_actual_durations", side_effect=lambda text, _: text),
         patch("mathmotion.pipeline._run_render_repair_loop", return_value={}),
         patch("mathmotion.pipeline.compose.run", return_value=tmp_path / "out.mp4"),
         patch("mathmotion.pipeline.outline_stage.run"),

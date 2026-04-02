@@ -105,11 +105,15 @@ def run(
     progress_callback: Optional[Callable[[str, int], None]] = None,
     job_id: Optional[str] = None,
     start_from_stage: Optional[str] = None,
+    script: Optional[GeneratedScript] = None,
 ) -> Path:
     """Run the full mathmotion pipeline for the given topic.
 
     ``start_from_stage`` can be set to one of the STAGES values to skip earlier
     stages and load their outputs from disk instead.
+
+    ``script`` can be supplied to skip all three generation stages (outline,
+    scene_script, scene_code) and proceed directly to TTS/render/compose.
     """
     def progress(step: str, pct: int) -> None:
         logger.info(f"[{pct}%] {step}")
@@ -139,38 +143,48 @@ def run(
 
     import shutil
 
-    # ── Outline ──────────────────────────────────────────────────────────────
-    if _should_run("outline", start_from_stage):
-        progress("Generating outline", 10)
-        provider = get_provider(config)
-        outline_result = outline_stage.run(topic, job_dir, config, provider, level=level)
-    else:
-        progress("Loading outline from disk", 10)
-        provider = get_provider(config)
-        outline_result = TopicOutline.model_validate(
-            json.loads((job_dir / "outline.json").read_text())
-        )
+    provider = get_provider(config)
 
-    # ── Scene scripts ─────────────────────────────────────────────────────────
-    if _should_run("scene_script", start_from_stage):
-        progress("Writing scene scripts", 20)
-        scripts_result = scene_script_stage.run(outline_result, job_dir, config, provider)
+    if script is not None:
+        # Caller supplied a pre-built script — skip all generation stages and
+        # write the necessary files to disk so later stages can find them.
+        progress("Using provided script (skipping generation stages)", 35)
+        scenes_dir = job_dir / "scenes"
+        scenes_dir.mkdir(parents=True, exist_ok=True)
+        for scene in script.scenes:
+            (scenes_dir / f"{scene.id}.py").write_text(scene.manim_code)
+        (job_dir / "narration.json").write_text(script.model_dump_json())
     else:
-        progress("Loading scene scripts from disk", 20)
-        from mathmotion.schemas.script import AllSceneScripts
-        scripts_result = AllSceneScripts.model_validate(
-            json.loads((job_dir / "scene_scripts.json").read_text())
-        )
+        # ── Outline ──────────────────────────────────────────────────────────
+        if _should_run("outline", start_from_stage):
+            progress("Generating outline", 10)
+            outline_result = outline_stage.run(topic, job_dir, config, provider, level=level)
+        else:
+            progress("Loading outline from disk", 10)
+            outline_result = TopicOutline.model_validate(
+                json.loads((job_dir / "outline.json").read_text())
+            )
 
-    # ── Scene code ────────────────────────────────────────────────────────────
-    if _should_run("scene_code", start_from_stage):
-        progress("Generating scene code", 35)
-        script = scene_code_stage.run(scripts_result, outline_result, job_dir, config, provider)
-    else:
-        progress("Loading scene code from disk", 35)
-        script = GeneratedScript.model_validate(
-            json.loads((job_dir / "narration.json").read_text())
-        )
+        # ── Scene scripts ─────────────────────────────────────────────────────
+        if _should_run("scene_script", start_from_stage):
+            progress("Writing scene scripts", 20)
+            scripts_result = scene_script_stage.run(outline_result, job_dir, config, provider)
+        else:
+            progress("Loading scene scripts from disk", 20)
+            from mathmotion.schemas.script import AllSceneScripts
+            scripts_result = AllSceneScripts.model_validate(
+                json.loads((job_dir / "scene_scripts.json").read_text())
+            )
+
+        # ── Scene code ────────────────────────────────────────────────────────
+        if _should_run("scene_code", start_from_stage):
+            progress("Generating scene code", 35)
+            script = scene_code_stage.run(scripts_result, outline_result, job_dir, config, provider)
+        else:
+            progress("Loading scene code from disk", 35)
+            script = GeneratedScript.model_validate(
+                json.loads((job_dir / "narration.json").read_text())
+            )
 
     # ── TTS ───────────────────────────────────────────────────────────────────
     if _should_run("tts", start_from_stage):
