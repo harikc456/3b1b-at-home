@@ -22,5 +22,6 @@ ANIMATION DESCRIPTION RULES:
 
 OUTPUT RULES:
 1. Respond with a single JSON object only. No markdown fences. No explanation.
-2. Conform exactly to this JSON schema:
-{schema_json}
+2. Fields required: id (string), title (string), narration (string), animation_description (object with fields: objects (array), sequence (array), notes (string)).
+3. Each object in "objects": id, type, color, initial_position.
+4. Each step in "sequence": action, target, timing, parameters (object).

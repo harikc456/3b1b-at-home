@@ -1,7 +1,7 @@
 from unittest.mock import MagicMock, patch
 
 
-def _make_config(model="gemini/gemini-2.5-pro", timeout=120):
+def _make_config(model="gemini/gemini-2.5-pro", timeout=300):
     cfg = MagicMock()
     cfg.llm.model = model
     cfg.llm.timeout_seconds = timeout
@@ -44,7 +44,7 @@ def test_complete_returns_llm_response():
         max_tokens=100,
         temperature=0.5,
         response_format={"type": "json_object"},
-        timeout=120,
+        timeout=300,
     )
 
 

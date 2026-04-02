@@ -49,10 +49,21 @@ def validate_scene_item(scene) -> None:
     if bad:
         raise ValidationError(f"Forbidden calls: {bad}")
 
+    if "MathMotionScene" not in scene.manim_code:
+        raise ValidationError(
+            f"Scene must extend MathMotionScene — got code without 'MathMotionScene'"
+        )
+
     if scene.class_name not in scene.manim_code:
         raise ValidationError(
             f"class_name '{scene.class_name}' not found in manim_code"
         )
+
+    if not scene.narration_segments:
+        raise ValidationError("Scene has no narration segments — add self.voiceover() calls")
+
+    if "self.voiceover(" not in scene.manim_code:
+        raise ValidationError("No self.voiceover() calls found in scene code")
 
     for seg in scene.narration_segments:
         if not seg.text.strip():

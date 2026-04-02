@@ -1,3 +1,4 @@
+import json
 import logging
 import shutil
 import subprocess
@@ -26,6 +27,13 @@ class Scene_Fallback_{sid}(Scene):
 def _render(scene: Scene, scenes_dir: Path, render_dir: Path, quality: str, config) -> Path:
     scene_path = scenes_dir / f"{scene.id}.py"
     q_flag, resolution, fps = QUALITY_FLAGS.get(quality, QUALITY_FLAGS["standard"])
+
+    durations = [
+        seg.actual_duration if seg.actual_duration is not None else max(1.0, len(seg.text.split()) / 2.5)
+        for seg in scene.narration_segments
+    ]
+    dur_file = scene_path.with_suffix(".durations.json")
+    dur_file.write_text(json.dumps(durations))
 
     logger.info(f"Starting manim render: {scene.id} ({quality}, {resolution}@{fps}fps)")
     with tempfile.TemporaryDirectory() as tmp:

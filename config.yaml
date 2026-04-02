@@ -1,20 +1,22 @@
 llm:
-  model: gemini/gemini-2.5-pro   # any litellm model string
+  model: gemini/gemini-2.0-flash   # Faster model for latency
   models:
-    - gemini/gemini-2.5-pro
     - gemini/gemini-2.0-flash
+    - gemini/gemini-2.5-pro
     - ollama/llama3.2
     - ollama/mistral
     - ollama/qwen2.5
     - ollama/gemma3
     - ollama/deepseek-r1
     - fireworks_ai/minimax-m2p5
-    - ollama/minimax-m2.5:cloud
+    - ollama/minimax-m2.7:cloud
+    - ollama/kimi-k2.5:cloud
   max_tokens: 16000
   temperature: 0.0
   max_retries: 3
   repair_max_retries: 3
-  timeout_seconds: 120
+  timeout_seconds: 300
+  max_parallel_scenes: 4
 
 tts:
   engine: kokoro                # kokoro | vibevoice

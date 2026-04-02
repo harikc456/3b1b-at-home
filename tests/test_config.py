@@ -2,7 +2,7 @@ def test_config_loads():
     from mathmotion.utils.config import get_config
     get_config.cache_clear()
     cfg = get_config()
-    assert cfg.llm.model == "gemini/gemini-2.5-pro"
+    assert cfg.llm.model == "gemini/gemini-2.0-flash"
     assert cfg.llm.max_tokens == 16000
     assert cfg.llm.temperature == 0.0
     assert cfg.tts.engine in ("kokoro", "vibevoice", "qwen3")

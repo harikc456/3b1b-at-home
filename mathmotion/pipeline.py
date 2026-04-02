@@ -50,7 +50,13 @@ def _run_render_repair_loop(
         if not remaining:
             break
 
-        successes, failures = try_render_all(remaining, scenes_dir, render_dir, quality, config)
+        successes, failures = try_render_all(
+            remaining,
+            scenes_dir,
+            render_dir,
+            quality,
+            config,
+        )
         results.update(successes)
         remaining = [scene_map[sid] for sid in failures]
 
@@ -62,15 +68,32 @@ def _run_render_repair_loop(
                 f"Repair attempt {attempt + 1}/{config.llm.repair_max_retries}: "
                 f"{len(remaining)} scene(s) need fixing"
             )
-            for scene in remaining:
-                try:
-                    repair.fix_scene(
-                        scenes_dir / f"{scene.id}.py",
-                        failures[scene.id],
-                        provider,
-                    )
-                except Exception as e:
-                    logger.warning(f"LLM repair failed for {scene.id}: {e} — will retry as-is")
+            from concurrent.futures import ThreadPoolExecutor, as_completed as futures_done
+
+            # Snapshot broken code + render error before repair overwrites the file
+            render_errors_file = job_dir / "render_errors.jsonl"
+            with render_errors_file.open("a") as ef:
+                for scene in remaining:
+                    scene_path = scenes_dir / f"{scene.id}.py"
+                    record = {
+                        "scene_id": scene.id,
+                        "repair_attempt": attempt + 1,
+                        "render_error": failures[scene.id],
+                        "broken_code": scene_path.read_text(),
+                    }
+                    ef.write(json.dumps(record) + "\n")
+
+            def _repair(scene):
+                repair.fix_scene(scenes_dir / f"{scene.id}.py", failures[scene.id], provider)
+
+            workers = min(config.llm.max_parallel_scenes, len(remaining))
+            with ThreadPoolExecutor(max_workers=workers) as pool:
+                repair_futures = {pool.submit(_repair, scene): scene for scene in remaining}
+                for future in futures_done(repair_futures):
+                    scene = repair_futures[future]
+                    exc = future.exception()
+                    if exc:
+                        logger.warning(f"LLM repair failed for {scene.id}: {exc} — will retry as-is")
 
     for scene in remaining:
         logger.error(f"Scene {scene.id} exhausted repair attempts — using fallback title card")
@@ -90,11 +113,15 @@ def run(
     progress_callback: Optional[Callable[[str, int], None]] = None,
     job_id: Optional[str] = None,
     start_from_stage: Optional[str] = None,
+    script: Optional[GeneratedScript] = None,
 ) -> Path:
     """Run the full mathmotion pipeline for the given topic.
 
     ``start_from_stage`` can be set to one of the STAGES values to skip earlier
     stages and load their outputs from disk instead.
+
+    ``script`` can be supplied to skip all three generation stages (outline,
+    scene_script, scene_code) and proceed directly to TTS/render/compose.
     """
     def progress(step: str, pct: int) -> None:
         logger.info(f"[{pct}%] {step}")
@@ -124,38 +151,48 @@ def run(
 
     import shutil
 
-    # ── Outline ──────────────────────────────────────────────────────────────
-    if _should_run("outline", start_from_stage):
-        progress("Generating outline", 10)
-        provider = get_provider(config)
-        outline_result = outline_stage.run(topic, job_dir, config, provider, level=level)
-    else:
-        progress("Loading outline from disk", 10)
-        provider = get_provider(config)
-        outline_result = TopicOutline.model_validate(
-            json.loads((job_dir / "outline.json").read_text())
-        )
+    provider = get_provider(config)
 
-    # ── Scene scripts ─────────────────────────────────────────────────────────
-    if _should_run("scene_script", start_from_stage):
-        progress("Writing scene scripts", 20)
-        scripts_result = scene_script_stage.run(outline_result, job_dir, config, provider)
+    if script is not None:
+        # Caller supplied a pre-built script — skip all generation stages and
+        # write the necessary files to disk so later stages can find them.
+        progress("Using provided script (skipping generation stages)", 35)
+        scenes_dir = job_dir / "scenes"
+        scenes_dir.mkdir(parents=True, exist_ok=True)
+        for scene in script.scenes:
+            (scenes_dir / f"{scene.id}.py").write_text(scene.manim_code)
+        (job_dir / "narration.json").write_text(script.model_dump_json())
     else:
-        progress("Loading scene scripts from disk", 20)
-        from mathmotion.schemas.script import AllSceneScripts
-        scripts_result = AllSceneScripts.model_validate(
-            json.loads((job_dir / "scene_scripts.json").read_text())
-        )
+        # ── Outline ──────────────────────────────────────────────────────────
+        if _should_run("outline", start_from_stage):
+            progress("Generating outline", 10)
+            outline_result = outline_stage.run(topic, job_dir, config, provider, level=level)
+        else:
+            progress("Loading outline from disk", 10)
+            outline_result = TopicOutline.model_validate(
+                json.loads((job_dir / "outline.json").read_text())
+            )
 
-    # ── Scene code ────────────────────────────────────────────────────────────
-    if _should_run("scene_code", start_from_stage):
-        progress("Generating scene code", 35)
-        script = scene_code_stage.run(scripts_result, outline_result, job_dir, config, provider)
-    else:
-        progress("Loading scene code from disk", 35)
-        script = GeneratedScript.model_validate(
-            json.loads((job_dir / "narration.json").read_text())
-        )
+        # ── Scene scripts ─────────────────────────────────────────────────────
+        if _should_run("scene_script", start_from_stage):
+            progress("Writing scene scripts", 20)
+            scripts_result = scene_script_stage.run(outline_result, job_dir, config, provider)
+        else:
+            progress("Loading scene scripts from disk", 20)
+            from mathmotion.schemas.script import AllSceneScripts
+            scripts_result = AllSceneScripts.model_validate(
+                json.loads((job_dir / "scene_scripts.json").read_text())
+            )
+
+        # ── Scene code ────────────────────────────────────────────────────────
+        if _should_run("scene_code", start_from_stage):
+            progress("Generating scene code", 35)
+            script = scene_code_stage.run(scripts_result, outline_result, job_dir, config, provider)
+        else:
+            progress("Loading scene code from disk", 35)
+            script = GeneratedScript.model_validate(
+                json.loads((job_dir / "narration.json").read_text())
+            )
 
     # ── TTS ───────────────────────────────────────────────────────────────────
     if _should_run("tts", start_from_stage):
