@@ -50,21 +50,12 @@ def _run_render_repair_loop(
         if not remaining:
             break
 
-        # Find the path of the scene immediately before the first one in 'remaining'
-        initial_prev_path = None
-        if remaining:
-            first_idx = next((i for i, s in enumerate(script.scenes) if s.id == remaining[0].id), 0)
-            if first_idx > 0:
-                prev_id = script.scenes[first_idx - 1].id
-                initial_prev_path = results.get(prev_id)
-
         successes, failures = try_render_all(
-            remaining, 
-            scenes_dir, 
-            render_dir, 
-            quality, 
+            remaining,
+            scenes_dir,
+            render_dir,
+            quality,
             config,
-            initial_prev_path=initial_prev_path
         )
         results.update(successes)
         remaining = [scene_map[sid] for sid in failures]

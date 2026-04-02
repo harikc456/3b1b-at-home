@@ -6,6 +6,7 @@ from pathlib import Path
 from mathmotion.schemas.script import GeneratedScript
 from mathmotion.utils.errors import CompositionError
 from mathmotion.utils.ffprobe import measure_duration
+from mathmotion.utils.video import freeze_frame
 
 logger = logging.getLogger(__name__)
 
@@ -21,33 +22,31 @@ def _build_audio_track(script: GeneratedScript, job_dir: Path) -> Path:
     audio_dir = job_dir / "audio"
     audio_dir.mkdir(parents=True, exist_ok=True)
     render_dir = job_dir / "scenes" / "render"
-    parts, current = [], 0.0
-    scene_start = 0.0
+    parts = []
 
     for scene in script.scenes:
-        # Measure the actual rendered video duration so we can map per-scene
-        # cue_offsets to global timestamps in the assembled video.
         scene_video = render_dir / f"{scene.id}.mp4"
         try:
-            scene_duration = measure_duration(scene_video)
+            scene_video_duration = measure_duration(scene_video)
         except Exception:
-            # Fall back to the sum of narration durations if probe fails.
-            scene_duration = sum(
+            scene_video_duration = sum(
                 (seg.actual_duration or 0.0) for seg in scene.narration_segments
             )
 
+        scene_audio_duration = 0.0
         for seg in scene.narration_segments:
-            global_offset = scene_start + seg.cue_offset
-            gap = global_offset - current
-            if gap > 0.05:
-                sil = audio_dir / f"sil_{len(parts)}.mp3"
-                _silence(sil, gap)
-                parts.append(str(sil))
-            if seg.audio_path:
+            if seg.audio_path and Path(seg.audio_path).exists():
                 parts.append(seg.audio_path)
-            current = global_offset + (seg.actual_duration or 0.0)
+                scene_audio_duration += (seg.actual_duration or 0.0)
+            else:
+                logger.warning(f"Missing audio for segment {seg.id}")
 
-        scene_start += scene_duration
+        # Pad with silence if video is longer than audio for this scene
+        padding = scene_video_duration - scene_audio_duration
+        if padding > 0.01:
+            sil = audio_dir / f"sil_pad_{scene.id}.mp3"
+            _silence(sil, padding)
+            parts.append(str(sil))
 
     concat = audio_dir / "concat.txt"
     concat.write_text("\n".join(f"file '{Path(p).resolve()}'" for p in parts))
@@ -67,9 +66,30 @@ def run(job_dir: Path, config) -> Path:
     audio = _build_audio_track(script, job_dir)
 
     render_dir = job_dir / "scenes" / "render"
+
+    # Build scene list, extending any scene whose video is shorter than its audio
+    scene_paths = []
+    for scene in script.scenes:
+        video_path = render_dir / f"{scene.id}.mp4"
+        try:
+            video_dur = measure_duration(video_path)
+        except Exception:
+            video_dur = sum(seg.actual_duration or 0.0 for seg in scene.narration_segments)
+
+        audio_dur = sum(seg.actual_duration or 0.0 for seg in scene.narration_segments)
+        gap = audio_dur - video_dur
+
+        if gap > 0.01:
+            extended = render_dir / f"{scene.id}_extended.mp4"
+            freeze_frame(video_path, gap, extended)
+            scene_paths.append(extended)
+            logger.info(f"Extended scene {scene.id} by {gap:.2f}s (audio > video)")
+        else:
+            scene_paths.append(video_path)
+
     scene_list = job_dir / "scene_list.txt"
     scene_list.write_text("\n".join(
-        f"file '{(render_dir / scene.id).with_suffix('.mp4').resolve()}'" for scene in script.scenes
+        f"file '{p.resolve()}'" for p in scene_paths
     ))
     assembled = job_dir / "assembled.mp4"
     subprocess.run([
