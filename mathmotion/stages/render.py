@@ -1,6 +1,5 @@
 import json
 import logging
-import os
 import shutil
 import subprocess
 import tempfile
@@ -29,20 +28,19 @@ def _render(scene: Scene, scenes_dir: Path, render_dir: Path, quality: str, conf
     scene_path = scenes_dir / f"{scene.id}.py"
     q_flag, resolution, fps = QUALITY_FLAGS.get(quality, QUALITY_FLAGS["standard"])
 
+    durations = [
+        seg.actual_duration if seg.actual_duration is not None else max(1.0, len(seg.text.split()) / 2.5)
+        for seg in scene.narration_segments
+    ]
+    dur_file = scene_path.with_suffix(".durations.json")
+    dur_file.write_text(json.dumps(durations))
+
     logger.info(f"Starting manim render: {scene.id} ({quality}, {resolution}@{fps}fps)")
     with tempfile.TemporaryDirectory() as tmp:
         cfg_path = Path(tmp) / "manim.cfg"
         cfg_path.write_text(
             f"[CLI]\nbackground_color = {config.manim.background_color}\n"
         )
-        durations = [
-            seg.actual_duration if seg.actual_duration is not None else max(1.0, len(seg.text.split()) / 2.5)
-            for seg in scene.narration_segments
-        ]
-        dur_file = Path(tmp) / "durations.json"
-        dur_file.write_text(json.dumps(durations))
-        env = os.environ.copy()
-        env["MATHMOTION_DURATIONS_FILE"] = str(dur_file)
         result = subprocess.run([
             "manim", "render",
             "-c", str(cfg_path),
@@ -56,7 +54,7 @@ def _render(scene: Scene, scenes_dir: Path, render_dir: Path, quality: str, conf
             "--disable_caching",
             "--write_to_movie",
             q_flag,
-        ], capture_output=True, text=True, timeout=config.manim.timeout_seconds, env=env)
+        ], capture_output=True, text=True, timeout=config.manim.timeout_seconds)
 
         if result.returncode != 0:
             if result.stdout.strip():

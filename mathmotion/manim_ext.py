@@ -1,5 +1,5 @@
+import inspect
 import json
-import os
 from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
@@ -17,9 +17,10 @@ class MathMotionScene(Scene):
         super().setup()
         self._mm_durations: list[float] = []
         self._mm_index: int = 0
-        durations_file = os.environ.get("MATHMOTION_DURATIONS_FILE", "")
-        if durations_file and Path(durations_file).exists():
-            self._mm_durations = json.loads(Path(durations_file).read_text())
+        scene_file = Path(inspect.getfile(self.__class__))
+        durations_path = scene_file.with_suffix(".durations.json")
+        if durations_path.exists():
+            self._mm_durations = json.loads(durations_path.read_text())
 
     @contextmanager
     def voiceover(self, text: str):

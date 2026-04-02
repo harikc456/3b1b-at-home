@@ -48,10 +48,6 @@ def run(script: GeneratedScript, job_dir: Path, config, engine: TTSEngine) -> No
     logger.debug(f"TTS run: engine={config.tts.engine!r}, scenes={len(script.scenes)}, total_segments={total_segs}, voice={voice!r}, speed={speed}")
     logger.info(f"Synthesising {total_segs} audio segment(s) with engine={config.tts.engine!r}")
 
-    narration_path = job_dir / "narration.json"
-    if not narration_path.exists():
-        narration_path.write_text(script.model_dump_json(indent=2))
-
     def synth(scene_id: str, seg: NarrationSegment):
         logger.info(f"Synthesising {seg.id} ({len(seg.text)} chars)…")
         scene_audio_dir = audio_dir / scene_id
@@ -60,28 +56,28 @@ def run(script: GeneratedScript, job_dir: Path, config, engine: TTSEngine) -> No
         fallback_duration = len(seg.text.split()) / 2.5
         try:
             duration = engine.synthesise(seg.text, out, voice=voice, speed=speed)
-            mp3 = _wav_to_mp3(out.with_suffix(".wav"))
+            wav = out.with_suffix(".wav")
+            mp3 = _wav_to_mp3(wav)
+            wav.unlink()
         except (TTSError, Exception) as e:
             logger.error(f"TTS failed for {seg.id}: {e} — using silence", exc_info=True)
             mp3 = _silence(out, fallback_duration)
             duration = fallback_duration
-        return scene_id, seg.id, duration, str(mp3)
+        return duration, str(mp3)
 
-    done = 0
+    updated = False
     for sid, seg in segments:
         # Idempotency: skip segments already synthesised in a previous run
         if seg.actual_duration is not None:
             logger.info(f"Skipping {seg.id} — already synthesised ({seg.actual_duration:.2f}s)")
             continue
-        scene_id, seg_id, duration, mp3_path = synth(sid, seg)
-        done += 1
-        data = json.loads(narration_path.read_text())
-        for scene in data["scenes"]:
-            if scene["id"] != scene_id:
-                continue
-            for s in scene["narration_segments"]:
-                if s["id"] == seg_id:
-                    s["actual_duration"] = duration
-                    s["audio_path"] = mp3_path
-        narration_path.write_text(json.dumps(data, indent=2))
-        logger.info(f"Synthesised {seg_id} ({duration:.2f}s) — {done} new segments done")
+        
+        duration, mp3_path = synth(sid, seg)
+        seg.actual_duration = duration
+        seg.audio_path = mp3_path
+        updated = True
+
+    if updated:
+        narration_path = job_dir / "narration.json"
+        narration_path.write_text(script.model_dump_json(indent=2))
+        logger.info(f"Updated {narration_path}")
