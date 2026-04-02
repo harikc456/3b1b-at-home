@@ -1,15 +1,43 @@
 import json
 import logging
+import re
 from pathlib import Path
 
 from mathmotion.llm.base import LLMProvider
 from mathmotion.schemas.script import (
-    AllSceneScripts, GeneratedScript, Scene, TopicOutline,
+    AllSceneScripts, GeneratedScript, NarrationSegment, Scene, TopicOutline,
 )
 from mathmotion.utils.errors import LLMError, ValidationError
 from mathmotion.utils.validation import validate_scene_item
 
 logger = logging.getLogger(__name__)
+
+
+def _strip_fences(code: str) -> str:
+    code = code.strip()
+    code = re.sub(r"^```(?:python)?\n?", "", code)
+    code = re.sub(r"\n?```$", "", code)
+    return code.strip()
+
+
+def _parse_code_to_scene(scene_id: str, code: str) -> Scene:
+    """Parse raw Python code into a Scene, extracting class name and voiceover segments."""
+    code = _strip_fences(code)
+
+    m = re.search(r"class (Scene_\w+)", code)
+    if not m:
+        raise ValueError("No Scene_ class found in generated code")
+    class_name = m.group(1)
+
+    pattern = r'self\.voiceover\(\s*(?:text\s*=\s*)?(["\'])(.*?)\1\s*\)'
+    texts = [m.group(2) for m in re.finditer(pattern, code, re.DOTALL)]
+
+    segments = [
+        NarrationSegment(id=f"seg_{i}", text=text)
+        for i, text in enumerate(texts)
+    ]
+
+    return Scene(id=scene_id, class_name=class_name, manim_code=code, narration_segments=segments)
 
 
 def _generate_scene(
@@ -20,12 +48,16 @@ def _generate_scene(
     prompt_template: str,
 ) -> Scene:
     """Generate Manim code for one scene. Returns Scene or raises LLMError."""
-    schema_json = json.dumps(Scene.model_json_schema(), indent=2)
+    outline_context = {
+        "title": outline.title,
+        "topic": outline.topic,
+        "scenes": [{"id": s.id, "title": s.title} for s in outline.scenes],
+    }
+
     system_prompt = (
         prompt_template
-        .replace("{outline_json}", outline.model_dump_json(indent=2))
+        .replace("{outline_json}", json.dumps(outline_context, indent=2))
         .replace("{scene_script_json}", scene_script.model_dump_json(indent=2))
-        .replace("{schema_json}", schema_json)
     )
 
     base_prompt = f"Implement Manim code for scene: {scene_script.id}"
@@ -44,23 +76,16 @@ def _generate_scene(
             resp = provider.complete(
                 system_prompt, user_prompt,
                 config.llm.max_tokens, config.llm.temperature,
-                response_schema=Scene.model_json_schema(),
+                json_mode=False,
             )
         except LLMError as e:
             last_error = str(e)
             continue
 
         try:
-            data = json.loads(resp.content)
-        except json.JSONDecodeError as e:
-            last_error = f"Invalid JSON: {e}"
-            continue
-
-        data["id"] = scene_script.id  # enforce ID — don't trust LLM
-        try:
-            scene = Scene.model_validate(data)
+            scene = _parse_code_to_scene(scene_script.id, resp.content)
         except Exception as e:
-            last_error = f"Schema error: {e}"
+            last_error = f"Parse error: {e}"
             continue
 
         try:
@@ -84,12 +109,28 @@ def run(
     config,
     provider: LLMProvider,
 ) -> GeneratedScript:
-    """Generate Manim code for all scenes. Raises LLMError if any scene fails."""
+    """Generate Manim code for all scenes. Sequential with idempotency."""
     prompt_template = Path("prompts/scene_code.txt").read_text()
+
+    narration_file = job_dir / "narration.json"
+    existing_scenes = {}
+    if narration_file.exists():
+        try:
+            data = json.loads(narration_file.read_text())
+            existing_scenes = {s["id"]: Scene.model_validate(s) for s in data.get("scenes", [])}
+            logger.info(f"Loaded {len(existing_scenes)} existing scene(s) from disk")
+        except Exception:
+            logger.warning("Failed to load existing narration, re-generating all")
+
     generated: list[Scene] = []
     failures: list[str] = []
 
     for scene_script in scripts.scenes:
+        if scene_script.id in existing_scenes:
+            generated.append(existing_scenes[scene_script.id])
+            logger.info(f"Using cached code for scene: {scene_script.id}")
+            continue
+
         try:
             scene = _generate_scene(scene_script, outline, config, provider, prompt_template)
             generated.append(scene)
@@ -113,7 +154,7 @@ def run(
     scenes_dir.mkdir(parents=True, exist_ok=True)
     for scene in script.scenes:
         (scenes_dir / f"{scene.id}.py").write_text(scene.manim_code)
-    (job_dir / "narration.json").write_text(script.model_dump_json(indent=2))
+    narration_file.write_text(script.model_dump_json(indent=2))
 
     logger.info(f"Generated {len(generated)} scene(s) — files written to {scenes_dir.resolve()}")
     return script

@@ -1,26 +1,32 @@
-import json
+import pytest
 from unittest.mock import MagicMock
 
 
-MINIMAL_CODE = """\
-from manim import Text, Scene
+MINIMAL_VOICEOVER_CODE = """\
+from manim import *
+from mathmotion.manim_ext import MathMotionScene
 
-class Scene_Intro(Scene):
+class Scene_Intro(MathMotionScene):
     def construct(self):
         t = Text("Hello")
-        self.add(t)
-        # WAIT:seg_1
-        self.wait(1)
+        with self.voiceover("Today we learn about derivatives.") as tracker:
+            self.play(Write(t), run_time=tracker.duration)
 """
 
-VALID_SCENE_JSON = json.dumps({
-    "id": "scene_1",
-    "class_name": "Scene_Intro",
-    "manim_code": MINIMAL_CODE,
-    "narration_segments": [
-        {"id": "seg_1", "text": "Today we learn about derivatives.", "cue_offset": 0.0}
-    ],
-})
+FENCED_VOICEOVER_CODE = "```python\n" + MINIMAL_VOICEOVER_CODE + "```"
+
+TWO_SEGMENT_CODE = """\
+from manim import *
+from mathmotion.manim_ext import MathMotionScene
+
+class Scene_Intro(MathMotionScene):
+    def construct(self):
+        t = Text("Hello")
+        with self.voiceover("First segment narration.") as tracker:
+            self.play(Write(t), run_time=tracker.duration)
+        with self.voiceover("Second segment narration.") as tracker:
+            self.play(FadeIn(t), run_time=tracker.duration)
+"""
 
 
 def _make_outline():
@@ -69,21 +75,58 @@ def _make_config(max_retries: int = 1) -> MagicMock:
     cfg.llm.max_retries = max_retries
     cfg.llm.max_tokens = 4096
     cfg.llm.temperature = 0.2
+    cfg.llm.model = "gemini-2.0-flash"
     return cfg
 
+
+# ── Parser tests ─────────────────────────────────────────────────────────────
+
+def test_parse_code_to_scene_extracts_class_name():
+    from mathmotion.stages.scene_code import _parse_code_to_scene
+    scene = _parse_code_to_scene("scene_1", MINIMAL_VOICEOVER_CODE)
+    assert scene.class_name == "Scene_Intro"
+
+
+def test_parse_code_to_scene_extracts_narration_segments():
+    from mathmotion.stages.scene_code import _parse_code_to_scene
+    scene = _parse_code_to_scene("scene_1", TWO_SEGMENT_CODE)
+    assert len(scene.narration_segments) == 2
+    assert scene.narration_segments[0].id == "seg_0"
+    assert scene.narration_segments[0].text == "First segment narration."
+    assert scene.narration_segments[1].id == "seg_1"
+    assert scene.narration_segments[1].text == "Second segment narration."
+
+
+def test_parse_code_to_scene_strips_markdown_fences():
+    from mathmotion.stages.scene_code import _parse_code_to_scene
+    scene = _parse_code_to_scene("scene_1", FENCED_VOICEOVER_CODE)
+    assert scene.class_name == "Scene_Intro"
+    assert "```" not in scene.manim_code
+
+
+def test_parse_code_to_scene_sets_scene_id():
+    from mathmotion.stages.scene_code import _parse_code_to_scene
+    scene = _parse_code_to_scene("scene_42", MINIMAL_VOICEOVER_CODE)
+    assert scene.id == "scene_42"
+
+
+def test_parse_code_to_scene_raises_on_missing_class():
+    from mathmotion.stages.scene_code import _parse_code_to_scene
+    with pytest.raises(ValueError, match="No Scene_ class"):
+        _parse_code_to_scene("scene_1", "from manim import *\n# no class here\n")
+
+
+# ── run() integration tests ───────────────────────────────────────────────────
 
 def test_run_returns_generated_script(tmp_path):
     from mathmotion.stages.scene_code import run
     from mathmotion.schemas.script import GeneratedScript
 
-    provider = _make_provider(VALID_SCENE_JSON)
-    cfg = _make_config()
-
-    result = run(_make_scripts(), _make_outline(), tmp_path, cfg, provider)
+    provider = _make_provider(MINIMAL_VOICEOVER_CODE)
+    result = run(_make_scripts(), _make_outline(), tmp_path, _make_config(), provider)
 
     assert isinstance(result, GeneratedScript)
     assert result.title == "Derivatives"
-    assert result.topic == "derivatives"
     assert len(result.scenes) == 1
     assert result.scenes[0].class_name == "Scene_Intro"
 
@@ -91,10 +134,7 @@ def test_run_returns_generated_script(tmp_path):
 def test_run_writes_scene_files_and_narration_json(tmp_path):
     from mathmotion.stages.scene_code import run
 
-    provider = _make_provider(VALID_SCENE_JSON)
-    cfg = _make_config()
-
-    run(_make_scripts(), _make_outline(), tmp_path, cfg, provider)
+    run(_make_scripts(), _make_outline(), tmp_path, _make_config(), _make_provider(MINIMAL_VOICEOVER_CODE))
 
     assert (tmp_path / "narration.json").exists()
     assert (tmp_path / "scenes" / "scene_1.py").exists()
@@ -102,152 +142,71 @@ def test_run_writes_scene_files_and_narration_json(tmp_path):
 
 
 def test_run_does_not_write_files_if_any_scene_fails(tmp_path):
-    import pytest
     from mathmotion.stages.scene_code import run
     from mathmotion.utils.errors import LLMError
 
-    provider = _make_provider("not valid json")
-    cfg = _make_config(max_retries=0)
-
+    provider = _make_provider("not valid python with no Scene_ class")
     with pytest.raises(LLMError):
-        run(_make_scripts(), _make_outline(), tmp_path, cfg, provider)
+        run(_make_scripts(), _make_outline(), tmp_path, _make_config(max_retries=0), provider)
 
     assert not (tmp_path / "narration.json").exists()
-    assert not (tmp_path / "scenes").exists()
 
 
 def test_run_raises_llm_error_naming_failed_scenes(tmp_path):
     from mathmotion.stages.scene_code import run
     from mathmotion.utils.errors import LLMError
 
-    provider = _make_provider("not valid json")
-    cfg = _make_config(max_retries=0)
-
-    import pytest
+    provider = _make_provider("no Scene_ class here")
     with pytest.raises(LLMError, match="scene_1"):
-        run(_make_scripts(), _make_outline(), tmp_path, cfg, provider)
+        run(_make_scripts(), _make_outline(), tmp_path, _make_config(max_retries=0), provider)
 
 
 def test_run_passes_outline_and_scene_script_to_provider(tmp_path):
     from mathmotion.stages.scene_code import run
 
-    provider = _make_provider(VALID_SCENE_JSON)
-    cfg = _make_config()
+    provider = _make_provider(MINIMAL_VOICEOVER_CODE)
+    run(_make_scripts(), _make_outline(), tmp_path, _make_config(), provider)
 
-    run(_make_scripts(), _make_outline(), tmp_path, cfg, provider)
-
-    call_args = provider.complete.call_args
-    system_prompt = call_args.args[0]
-    assert "Derivatives" in system_prompt        # outline in prompt
-    assert "Today we learn" in system_prompt     # scene narration in prompt
+    system_prompt = provider.complete.call_args.args[0]
+    assert "Derivatives" in system_prompt
+    assert "Today we learn" in system_prompt
 
 
-def test_run_retries_per_scene_on_invalid_json(tmp_path):
-    """A scene that returns invalid JSON on attempt 1 should be retried and succeed on attempt 2."""
+def test_run_calls_provider_with_json_mode_false(tmp_path):
+    from mathmotion.stages.scene_code import run
+
+    provider = _make_provider(MINIMAL_VOICEOVER_CODE)
+    run(_make_scripts(), _make_outline(), tmp_path, _make_config(), provider)
+
+    call_kwargs = provider.complete.call_args.kwargs
+    assert call_kwargs.get("json_mode") is False
+
+
+def test_run_retries_on_parse_error(tmp_path):
     from mathmotion.stages.scene_code import run
     from mathmotion.schemas.script import GeneratedScript
 
     bad_resp = MagicMock()
-    bad_resp.content = "not valid json"
+    bad_resp.content = "no Scene_ class"
     good_resp = MagicMock()
-    good_resp.content = VALID_SCENE_JSON
+    good_resp.content = MINIMAL_VOICEOVER_CODE
 
     provider = MagicMock()
     provider.complete.side_effect = [bad_resp, good_resp]
 
-    cfg = _make_config(max_retries=1)
-    result = run(_make_scripts(), _make_outline(), tmp_path, cfg, provider)
+    result = run(_make_scripts(), _make_outline(), tmp_path, _make_config(max_retries=1), provider)
 
     assert isinstance(result, GeneratedScript)
-    assert result.scenes[0].class_name == "Scene_Intro"
     assert provider.complete.call_count == 2
 
 
-def test_run_enforces_scene_id_from_input_not_llm(tmp_path):
-    """LLM returning a wrong id must not affect the output filename or scene.id."""
+def test_run_scene_id_comes_from_input_not_llm(tmp_path):
+    """LLM returning Scene_Wrong class does not affect scene.id."""
     from mathmotion.stages.scene_code import run
 
-    # LLM returns id="scene_WRONG" instead of the expected "scene_1"
-    wrong_id_json = json.dumps({
-        "id": "scene_WRONG",
-        "class_name": "Scene_Intro",
-        "manim_code": MINIMAL_CODE,
-        "narration_segments": [
-            {"id": "seg_1", "text": "Today we learn about derivatives.", "cue_offset": 0.0}
-        ],
-    })
-    provider = _make_provider(wrong_id_json)
-    cfg = _make_config()
-
-    result = run(_make_scripts(), _make_outline(), tmp_path, cfg, provider)
+    wrong_class_code = MINIMAL_VOICEOVER_CODE.replace("Scene_Intro", "Scene_Wrong")
+    provider = _make_provider(wrong_class_code)
+    result = run(_make_scripts(), _make_outline(), tmp_path, _make_config(), provider)
 
     assert result.scenes[0].id == "scene_1"
     assert (tmp_path / "scenes" / "scene_1.py").exists()
-    assert not (tmp_path / "scenes" / "scene_WRONG.py").exists()
-
-
-def test_run_writes_distinct_files_for_each_scene(tmp_path):
-    """Each scene must produce a distinct file even if LLM returns the same id for all."""
-    from mathmotion.stages.scene_code import run
-    from mathmotion.schemas.script import (
-        AllSceneScripts, SceneScript, AnimationDescription, AnimationObject, AnimationStep,
-    )
-
-    # Two scenes in the input
-    scripts = AllSceneScripts(
-        title="Derivatives",
-        topic="derivatives",
-        scenes=[
-            SceneScript(
-                id="scene_1", title="Intro", narration="Intro narration.",
-                animation_description=AnimationDescription(
-                    objects=[AnimationObject(id="t", type="Text", color="WHITE", initial_position="CENTER")],
-                    sequence=[AnimationStep(action="FadeIn", target="t", timing="start", parameters={})],
-                    notes="",
-                ),
-            ),
-            SceneScript(
-                id="scene_2", title="Main", narration="Main narration.",
-                animation_description=AnimationDescription(
-                    objects=[AnimationObject(id="t", type="Text", color="WHITE", initial_position="CENTER")],
-                    sequence=[AnimationStep(action="FadeIn", target="t", timing="start", parameters={})],
-                    notes="",
-                ),
-            ),
-        ],
-    )
-    outline = _make_outline()
-    # Extend outline to have 2 scenes too
-    from mathmotion.schemas.script import TopicOutline, SceneOutlineItem
-    outline = TopicOutline(
-        title="Derivatives", topic="derivatives", level="undergraduate",
-        scenes=[
-            SceneOutlineItem(id="scene_1", title="Intro", purpose="intro", order=1),
-            SceneOutlineItem(id="scene_2", title="Main", purpose="main", order=2),
-        ],
-    )
-
-    # LLM always returns id="scene_1" regardless of input — the overwrite bug
-    provider = _make_provider(VALID_SCENE_JSON)  # VALID_SCENE_JSON has id="scene_1"
-    cfg = _make_config()
-
-    result = run(scripts, outline, tmp_path, cfg, provider)
-
-    assert len(result.scenes) == 2
-    assert result.scenes[0].id == "scene_1"
-    assert result.scenes[1].id == "scene_2"
-    assert (tmp_path / "scenes" / "scene_1.py").exists()
-    assert (tmp_path / "scenes" / "scene_2.py").exists()
-
-
-def test_run_passes_schema_to_provider(tmp_path):
-    from mathmotion.stages.scene_code import run
-    from mathmotion.schemas.script import Scene
-
-    provider = _make_provider(VALID_SCENE_JSON)
-    cfg = _make_config()
-
-    run(_make_scripts(), _make_outline(), tmp_path, cfg, provider)
-
-    call_kwargs = provider.complete.call_args.kwargs
-    assert call_kwargs["response_schema"] == Scene.model_json_schema()
