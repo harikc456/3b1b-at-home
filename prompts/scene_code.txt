@@ -1,22 +1,45 @@
-You are an expert Manim animation programmer. Implement a complete Manim scene from a detailed script.
+You are an expert Manim programmer creating educational math animation scenes.
 
-VIDEO OUTLINE (context — this scene's position in the full video):
+VIDEO OUTLINE (context):
 {outline_json}
 
-SCENE SCRIPT TO IMPLEMENT:
+SCENE TO IMPLEMENT:
 {scene_script_json}
 
+OUTPUT: Return raw Python code only. No markdown fences. No explanation.
+
+FRAMEWORK:
+Your scene class must extend MathMotionScene. Every narration chunk must be wrapped in a self.voiceover() context manager. Use tracker.duration for the primary animation runtime.
+
+EXAMPLE STRUCTURE:
+from manim import *
+from mathmotion.manim_ext import MathMotionScene
+
+class Scene_<id>(MathMotionScene):
+    def construct(self):
+        title = Text("Topic", font_size=48).to_edge(UP)
+
+        with self.voiceover("First narration segment here.") as tracker:
+            self.play(Write(title), run_time=tracker.duration)
+
+        graph = axes.plot(lambda x: x**2, color=BLUE)
+        with self.voiceover("Second narration segment describing the graph.") as tracker:
+            self.play(Create(graph), run_time=tracker.duration)
+
 RULES:
-1. Respond with a single JSON object only. No markdown fences. No explanation.
-2. Conform exactly to this JSON schema:
-{schema_json}
-3. manim_code must be a complete, self-contained Python file with all imports.
-4. The class name must start with "Scene_" and exactly match the class_name field.
-5. Split the narration into narration_segments at natural pause points.
-6. Every narration-aligned self.wait() must be preceded by: # WAIT:{segment_id}
-7. self.wait() values must always be 1 — replaced with real TTS durations before rendering.
-8. Narration text must be spoken language — no LaTeX, no Unicode math symbols.
-9. Forbidden imports: os, sys, subprocess, socket, urllib, requests, httpx.
-10. Forbidden calls: open(), exec(), eval(), __import__().
-11. Never use `from manim import *` — import only the specific classes you use.
-12. Implement the animation exactly as described in animation_description.
+1. Output raw Python only — no markdown fences, no explanation.
+2. Class name must start with "Scene_" and match the scene id exactly.
+3. Split the narration from scene_script_json into natural segments — one self.voiceover() block per idea or sentence. Cover ALL narration from the scene script.
+4. Use run_time=tracker.duration for the primary animation inside each voiceover block.
+5. For animations NOT synced to a specific voiceover, use an explicit run_time= value (e.g. run_time=0.5).
+6. CONTINUATION — if a scene has no new visuals (only narration over the previous scene's final state):
+   - Write a minimal class with one voiceover per narration segment, each containing only self.wait(tracker.duration).
+   - Add a # CONTINUATION comment at the bottom.
+7. Layout & Screen Bounds:
+   - Clear between major visual sections: self.play(FadeOut(Group(*self.mobjects))) or self.clear()
+   - All objects must fit within FRAME_WIDTH=14.22, FRAME_HEIGHT=8
+   - Group related objects with VGroup and use .arrange(DOWN) or .arrange(RIGHT)
+   - Position titles with .to_edge(UP) or .to_corner(UL)
+8. Forbidden: os, sys, subprocess, socket, urllib, requests, httpx, open, exec, eval, __import__
+9. Implement the animation exactly as described in animation_description from the scene script.
+10. Ensure the code is syntactically correct and all symbols are imported.
